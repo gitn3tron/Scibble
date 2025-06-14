@@ -1,0 +1,537 @@
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { v4 as uuidv4 } from 'uuid';
+
+const app = express();
+const httpServer = createServer(app);
+
+// Updated CORS and Socket.IO configuration for better connection handling
+const io = new Server(httpServer, {
+  cors: {
+    // Allow specific origins in development with protocol matching
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.CLIENT_URL 
+      : ['http://localhost:5173', 'http://localhost:3000', 'https://localhost:5173', 'https://localhost:3000'],
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  },
+  // Improved transport configuration
+  transports: ['polling', 'websocket'],
+  pingTimeout: 120000,    // 2 minutes
+  pingInterval: 25000,    // 25 seconds
+  upgradeTimeout: 30000,  // 30 seconds
+  maxHttpBufferSize: 1e8  // 100 MB
+});
+
+// Game state storage
+const rooms = new Map();
+const players = new Map();
+
+// Default word list
+const defaultWords = [
+  'apple', 'banana', 'car', 'dog', 'elephant', 'flower', 'guitar', 'house', 'igloo', 'jacket',
+  'kite', 'lion', 'mountain', 'notebook', 'ocean', 'pizza', 'queen', 'rainbow', 'sun', 'tree',
+  'umbrella', 'violin', 'whale', 'xylophone', 'yacht', 'zebra', 'airplane', 'butterfly', 'castle', 'diamond',
+  'eagle', 'fire', 'garden', 'hammer', 'island', 'jungle', 'keyboard', 'lighthouse', 'mirror', 'nest',
+  'orange', 'penguin', 'quilt', 'robot', 'sandwich', 'telescope', 'unicorn', 'volcano', 'waterfall', 'x-ray'
+];
+
+// Utility functions
+function generateRoomId() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function createRoom(roomId, settings, hostPlayer) {
+  const room = {
+    id: roomId,
+    players: [hostPlayer],
+    settings,
+    gameState: {
+      isPlaying: false,
+      currentRound: 0,
+      currentDrawer: null,
+      currentWord: '',
+      timeLeft: 0,
+      scores: {},
+      messages: [],
+      wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords]
+    },
+    timer: null
+  };
+  
+  rooms.set(roomId, room);
+  return room;
+}
+
+function getRandomWord(wordList) {
+  return wordList[Math.floor(Math.random() * wordList.length)];
+}
+
+function createRevealedWord(word, hintsRevealed = 0) {
+  if (hintsRevealed === 0) {
+    return word.replace(/[a-zA-Z]/g, '_');
+  }
+  
+  const wordArray = word.split('');
+  const lettersToReveal = Math.min(hintsRevealed, Math.floor(word.length / 2));
+  const revealedIndices = new Set();
+  
+  while (revealedIndices.size < lettersToReveal) {
+    const randomIndex = Math.floor(Math.random() * word.length);
+    if (word[randomIndex].match(/[a-zA-Z]/)) {
+      revealedIndices.add(randomIndex);
+    }
+  }
+  
+  return wordArray.map((char, index) => {
+    if (revealedIndices.has(index) || !char.match(/[a-zA-Z]/)) {
+      return char;
+    }
+    return '_';
+  }).join('');
+}
+
+function startRound(room) {
+  console.log(`🎯 Starting round ${room.gameState.currentRound + 1} for room ${room.id}`);
+  
+  room.gameState.currentRound++;
+  room.gameState.timeLeft = room.settings.drawTime;
+  
+  // Select next drawer (rotate through players)
+  const currentDrawerIndex = room.players.findIndex(p => p.id === room.gameState.currentDrawer);
+  const nextDrawerIndex = (currentDrawerIndex + 1) % room.players.length;
+  const nextDrawer = room.players[nextDrawerIndex];
+  
+  room.gameState.currentDrawer = nextDrawer.id;
+  room.gameState.currentWord = getRandomWord(room.gameState.wordList);
+  
+  // Update player drawing status
+  room.players.forEach(player => {
+    player.isDrawing = player.id === nextDrawer.id;
+  });
+  
+  const revealedWord = createRevealedWord(room.gameState.currentWord);
+  
+  // Notify all players about round start
+  room.players.forEach(player => {
+    const socket = players.get(player.id);
+    if (socket) {
+      socket.emit('round-started', {
+        currentRound: room.gameState.currentRound,
+        timeLeft: room.gameState.timeLeft,
+        drawingPlayerId: nextDrawer.id,
+        currentWord: player.id === nextDrawer.id ? room.gameState.currentWord : undefined,
+        revealedWord: revealedWord
+      });
+    }
+  });
+  
+  // Start timer
+  room.timer = setInterval(() => {
+    room.gameState.timeLeft--;
+    
+    // Broadcast time update
+    io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
+    
+    // Check for hints
+    const hintInterval = Math.floor(room.settings.drawTime / (room.settings.hintsCount + 1));
+    const hintsGiven = Math.floor((room.settings.drawTime - room.gameState.timeLeft) / hintInterval);
+    
+    if (hintsGiven > 0 && hintsGiven <= room.settings.hintsCount) {
+      const newRevealedWord = createRevealedWord(room.gameState.currentWord, hintsGiven);
+      io.to(room.id).emit('hint-revealed', { revealedWord: newRevealedWord });
+    }
+    
+    // End round when time is up
+    if (room.gameState.timeLeft <= 0) {
+      endRound(room);
+    }
+  }, 1000);
+}
+
+function endRound(room) {
+  console.log(`🏁 Ending round ${room.gameState.currentRound} for room ${room.id}`);
+  
+  if (room.timer) {
+    clearInterval(room.timer);
+    room.timer = null;
+  }
+  
+  // Reset drawing status
+  room.players.forEach(player => {
+    player.isDrawing = false;
+  });
+  
+  // Broadcast round end
+  const scores = {};
+  room.players.forEach(player => {
+    scores[player.id] = player.score;
+  });
+  
+  io.to(room.id).emit('round-ended', { scores });
+  
+  // Check if game should end
+  if (room.gameState.currentRound >= room.settings.totalRounds) {
+    endGame(room);
+  } else {
+    // Start next round after a delay
+    setTimeout(() => {
+      if (rooms.has(room.id)) {
+        startRound(room);
+      }
+    }, 3000);
+  }
+}
+
+function endGame(room) {
+  console.log(`🎊 Ending game for room ${room.id}`);
+  
+  room.gameState.isPlaying = false;
+  
+  const finalScores = {};
+  room.players.forEach(player => {
+    finalScores[player.id] = player.score;
+  });
+  
+  io.to(room.id).emit('game-ended', { finalScores });
+}
+
+function addMessage(room, message) {
+  room.gameState.messages.push(message);
+  io.to(room.id).emit('new-message', message);
+}
+
+// Socket.IO event handlers
+io.on('connection', (socket) => {
+  console.log(`🔌 User connected: ${socket.id}`);
+
+  socket.on('create-room', (data) => {
+    console.log('🏠 Received create-room event:', data);
+    
+    try {
+      const { player, settings } = data;
+      const roomId = generateRoomId();
+      
+      // Initialize player scores
+      player.score = 0;
+      player.isDrawing = false;
+      
+      // Store player socket mapping
+      players.set(player.id, socket);
+      
+      // Create room
+      const room = createRoom(roomId, settings, player);
+      
+      // Join socket to room
+      socket.join(roomId);
+      
+      console.log(`✅ Room ${roomId} created successfully`);
+      
+      // Send response to client
+      socket.emit('room-created', { roomId });
+      socket.emit('player-joined', { players: room.players });
+      
+    } catch (error) {
+      console.error('❌ Error creating room:', error);
+      socket.emit('error', { message: 'Failed to create room' });
+    }
+  });
+
+  socket.on('join-room', (data) => {
+    console.log('🚪 Received join-room event:', data);
+    
+    try {
+      const { player, roomId } = data;
+      const room = rooms.get(roomId);
+      
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+      
+      if (room.players.length >= room.settings.totalPlayers) {
+        socket.emit('error', { message: 'Room is full' });
+        return;
+      }
+      
+      if (room.gameState.isPlaying) {
+        socket.emit('error', { message: 'Game already in progress' });
+        return;
+      }
+      
+      // Initialize player
+      player.score = 0;
+      player.isDrawing = false;
+      
+      // Add player to room
+      room.players.push(player);
+      players.set(player.id, socket);
+      
+      // Join socket to room
+      socket.join(roomId);
+      
+      console.log(`✅ Player ${player.name} joined room ${roomId}`);
+      
+      // Notify all players in room
+      io.to(roomId).emit('player-joined', { players: room.players });
+      
+      // Send welcome message
+      const welcomeMessage = {
+        id: uuidv4(),
+        playerId: 'system',
+        playerName: 'System',
+        text: `${player.name} joined the game!`,
+        type: 'system',
+        timestamp: Date.now()
+      };
+      
+      addMessage(room, welcomeMessage);
+      
+    } catch (error) {
+      console.error('❌ Error joining room:', error);
+      socket.emit('error', { message: 'Failed to join room' });
+    }
+  });
+
+  socket.on('start-game', (data) => {
+    console.log('🎮 Received start-game event:', data);
+    
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+      
+      if (room.players.length < 2) {
+        socket.emit('error', { message: 'Need at least 2 players to start' });
+        return;
+      }
+      
+      room.gameState.isPlaying = true;
+      room.gameState.currentRound = 0;
+      
+      // Initialize scores
+      room.players.forEach(player => {
+        room.gameState.scores[player.id] = 0;
+      });
+      
+      console.log(`✅ Game started for room ${roomId}`);
+      
+      // Notify all players
+      io.to(roomId).emit('game-started', {
+        isPlaying: true,
+        totalRounds: room.settings.totalRounds,
+        currentRound: 0
+      });
+      
+      // Start first round after a delay
+      setTimeout(() => {
+        if (rooms.has(roomId)) {
+          startRound(room);
+        }
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Error starting game:', error);
+      socket.emit('error', { message: 'Failed to start game' });
+    }
+  });
+
+  socket.on('send-message', (data) => {
+    console.log('💬 Received send-message event:', data);
+    
+    try {
+      const { roomId, playerId, playerName, text } = data;
+      const room = rooms.get(roomId);
+      
+      if (!room) return;
+      
+      const player = room.players.find(p => p.id === playerId);
+      if (!player) return;
+      
+      // Check if it's a correct guess
+      if (room.gameState.isPlaying && 
+          room.gameState.currentWord && 
+          text.toLowerCase().trim() === room.gameState.currentWord.toLowerCase() &&
+          playerId !== room.gameState.currentDrawer) {
+        
+        // Award points
+        const timeBonus = Math.floor(room.gameState.timeLeft / 10);
+        const points = 100 + timeBonus;
+        player.score += points;
+        
+        // Create correct guess message
+        const correctMessage = {
+          id: uuidv4(),
+          playerId: playerId,
+          playerName: playerName,
+          text: `${playerName} guessed the word correctly! (+${points} points)`,
+          type: 'correct-guess',
+          timestamp: Date.now()
+        };
+        
+        addMessage(room, correctMessage);
+        
+        // Notify about score update
+        io.to(roomId).emit('player-guessed', { playerId, score: player.score });
+        
+        // End round if someone guessed correctly
+        endRound(room);
+        
+      } else if (!player.isDrawing) {
+        // Regular chat message (only if not drawing)
+        const message = {
+          id: uuidv4(),
+          playerId: playerId,
+          playerName: playerName,
+          text: text,
+          type: 'chat',
+          timestamp: Date.now()
+        };
+        
+        addMessage(room, message);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+    }
+  });
+
+  socket.on('draw', (data) => {
+    try {
+      const { roomId, from, to, color, brushSize, tool } = data;
+      
+      // Broadcast drawing data to all other players in the room
+      socket.to(roomId).emit('drawing-data', {
+        from,
+        to,
+        color,
+        brushSize,
+        tool
+      });
+      
+    } catch (error) {
+      console.error('❌ Error handling draw event:', error);
+    }
+  });
+
+  socket.on('clear', (data) => {
+    try {
+      const { roomId } = data;
+      
+      // Broadcast clear canvas to all other players in the room
+      socket.to(roomId).emit('clear-canvas');
+      
+    } catch (error) {
+      console.error('❌ Error handling clear event:', error);
+    }
+  });
+
+  socket.on('leave-room', (data) => {
+    console.log('🚪 Received leave-room event:', data);
+    
+    try {
+      const { roomId, playerId } = data;
+      const room = rooms.get(roomId);
+      
+      if (!room) return;
+      
+      // Remove player from room
+      room.players = room.players.filter(p => p.id !== playerId);
+      players.delete(playerId);
+      
+      // Leave socket room
+      socket.leave(roomId);
+      
+      // If room is empty, clean it up
+      if (room.players.length === 0) {
+        if (room.timer) {
+          clearInterval(room.timer);
+        }
+        rooms.delete(roomId);
+        console.log(`🧹 Room ${roomId} deleted (empty)`);
+      } else {
+        // Notify remaining players
+        io.to(roomId).emit('player-joined', { players: room.players });
+        
+        const leaveMessage = {
+          id: uuidv4(),
+          playerId: 'system',
+          playerName: 'System',
+          text: `A player left the game`,
+          type: 'system',
+          timestamp: Date.now()
+        };
+        
+        addMessage(room, leaveMessage);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error leaving room:', error);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`🔌 User disconnected: ${socket.id}`);
+    
+    // Find and remove player from any rooms
+    for (const [playerId, playerSocket] of players.entries()) {
+      if (playerSocket.id === socket.id) {
+        // Find room containing this player
+        for (const [roomId, room] of rooms.entries()) {
+          const playerIndex = room.players.findIndex(p => p.id === playerId);
+          if (playerIndex !== -1) {
+            // Remove player
+            room.players.splice(playerIndex, 1);
+            players.delete(playerId);
+            
+            // Clean up empty room
+            if (room.players.length === 0) {
+              if (room.timer) {
+                clearInterval(room.timer);
+              }
+              rooms.delete(roomId);
+              console.log(`🧹 Room ${roomId} deleted (empty after disconnect)`);
+            } else {
+              // Notify remaining players
+              io.to(roomId).emit('player-joined', { players: room.players });
+            }
+            break;
+          }
+        }
+        break;
+      }
+    }
+  });
+});
+
+// Start the server with improved error handling
+const PORT = process.env.PORT || 3001;
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Server stats: Rooms: ${rooms.size}, Players: ${players.size}`);
+}).on('error', (error) => {
+  console.error('❌ Server failed to start:', error);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully');
+  httpServer.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, shutting down gracefully');
+  httpServer.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
