@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { useSocket } from '../context/SocketContext';
-import { Clipboard, Play, ArrowLeft, Check, Loader2 } from 'lucide-react';
+import { Clipboard, Play, ArrowLeft, Check, Loader2, Copy } from 'lucide-react';
 
 const RoomCreationPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ const RoomCreationPage: React.FC = () => {
     customWords: ''
   });
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Redirect if no player set
@@ -111,6 +112,14 @@ const RoomCreationPage: React.FC = () => {
       navigator.clipboard.writeText(roomLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const copyRoomCode = () => {
+    if (gameState.roomId) {
+      navigator.clipboard.writeText(gameState.roomId);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
     }
   };
 
@@ -306,19 +315,46 @@ const RoomCreationPage: React.FC = () => {
         ) : connected && gameState.roomId ? (
           <div className="p-6">
             <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold">Room Created!</h2>
-              <p className="text-gray-600">Share this link with your friends:</p>
+              <h2 className="text-xl font-semibold mb-4">Room Created!</h2>
               
-              <div className="mt-4 bg-gray-100 p-3 rounded-lg flex justify-between items-center">
-                <span className="text-gray-800 truncate">
-                  {`${window.location.origin}/room/${gameState.roomId}`}
-                </span>
-                <button
-                  onClick={copyRoomLink}
-                  className="ml-2 p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors"
-                >
-                  {copied ? <Check size={18} /> : <Clipboard size={18} />}
-                </button>
+              {/* Room Code Display - Most Prominent */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border-2 border-purple-200">
+                <p className="text-sm text-gray-600 mb-2">Share this room code with friends:</p>
+                <div className="flex items-center justify-center space-x-3">
+                  <div className="text-3xl font-bold text-purple-700 tracking-wider font-mono bg-white px-4 py-2 rounded-lg shadow-sm">
+                    {gameState.roomId}
+                  </div>
+                  <button
+                    onClick={copyRoomCode}
+                    className="p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm"
+                    title="Copy room code"
+                  >
+                    {codeCopied ? <Check size={20} /> : <Copy size={20} />}
+                  </button>
+                </div>
+                {codeCopied && (
+                  <p className="text-green-600 text-sm mt-2 font-medium">Room code copied!</p>
+                )}
+              </div>
+
+              {/* Full Link - Secondary Option */}
+              <div className="mb-6">
+                <p className="text-gray-600 text-sm mb-2">Or share the full link:</p>
+                <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center">
+                  <span className="text-gray-800 truncate text-sm">
+                    {`${window.location.origin}/room/${gameState.roomId}`}
+                  </span>
+                  <button
+                    onClick={copyRoomLink}
+                    className="ml-2 p-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
+                    title="Copy full link"
+                  >
+                    {copied ? <Check size={16} /> : <Clipboard size={16} />}
+                  </button>
+                </div>
+                {copied && (
+                  <p className="text-green-600 text-xs mt-1">Link copied!</p>
+                )}
               </div>
             </div>
             
