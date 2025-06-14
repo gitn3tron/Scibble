@@ -26,7 +26,7 @@ const ChatBox: React.FC = () => {
   const renderMessage = (msg: typeof gameState.messages[0]) => {
     if (msg.type === 'system') {
       return (
-        <div key={msg.id} className="p-2 text-sm text-gray-500 italic">
+        <div key={msg.id} className="p-2 text-sm text-gray-600 italic bg-gray-50 rounded-lg mx-2 my-1">
           {msg.text}
         </div>
       );
@@ -34,8 +34,8 @@ const ChatBox: React.FC = () => {
     
     if (msg.type === 'correct-guess') {
       return (
-        <div key={msg.id} className="p-2 text-sm font-medium text-green-600 bg-green-50 rounded-lg">
-          <span className="font-bold">{msg.playerName}</span> guessed the word correctly!
+        <div key={msg.id} className="p-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg mx-2 my-1">
+          {msg.text}
         </div>
       );
     }
@@ -45,28 +45,28 @@ const ChatBox: React.FC = () => {
     return (
       <div 
         key={msg.id} 
-        className={`p-2 mb-1 max-w-[85%] ${
+        className={`p-2 mb-1 max-w-[85%] mx-2 ${
           isCurrentPlayer 
             ? 'ml-auto bg-purple-600 text-white rounded-tl-lg rounded-tr-lg rounded-bl-lg' 
             : 'mr-auto bg-gray-200 text-gray-800 rounded-tl-lg rounded-tr-lg rounded-br-lg'
         }`}
       >
         {!isCurrentPlayer && (
-          <div className="text-xs font-bold mb-1">{msg.playerName}</div>
+          <div className="text-xs font-bold mb-1 text-gray-600">{msg.playerName}</div>
         )}
-        <div>{msg.text}</div>
+        <div className={isCurrentPlayer ? 'text-white' : 'text-gray-800'}>{msg.text}</div>
       </div>
     );
   };
   
   return (
     <div className="flex flex-col h-full">
-      <div className="p-2 bg-gray-50 border-b flex items-center">
+      <div className="p-3 bg-gray-50 border-b flex items-center">
         <MessageSquare size={18} className="text-purple-600 mr-2" />
-        <h3 className="font-semibold">Chat & Activity</h3>
+        <h3 className="font-semibold text-gray-800">Chat & Activity</h3>
       </div>
       
-      <div className="flex-grow overflow-y-auto p-2">
+      <div className="flex-grow overflow-y-auto p-2 bg-white">
         <div className="flex flex-col space-y-1">
           {gameState.messages.length > 0 ? (
             gameState.messages.map(renderMessage)
@@ -79,18 +79,18 @@ const ChatBox: React.FC = () => {
         </div>
       </div>
       
-      <form onSubmit={handleSubmit} className="p-2 border-t flex">
+      <form onSubmit={handleSubmit} className="p-3 border-t bg-white flex">
         <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={gameState.isPlaying ? "Type your guess..." : "Type a message..."}
-          className="flex-grow px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="flex-grow px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
           disabled={!player || !gameState.roomId || (player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
         />
         <button
           type="submit"
-          className="bg-purple-600 text-white px-4 py-2 rounded-r-lg hover:bg-purple-700"
+          className="bg-purple-600 text-white px-4 py-2 rounded-r-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           disabled={!message.trim() || !player || !gameState.roomId || (player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
         >
           <Send size={18} />

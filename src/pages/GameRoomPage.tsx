@@ -7,7 +7,7 @@ import ChatBox from '../components/ChatBox';
 import PlayersList from '../components/PlayersList';
 import GameControls from '../components/GameControls';
 import GameOverScreen from '../components/GameOverScreen';
-import { Clock, Home } from 'lucide-react';
+import { Clock, Home, Play, Users } from 'lucide-react';
 
 const GameRoomPage: React.FC = () => {
   const navigate = useNavigate();
@@ -49,9 +49,117 @@ const GameRoomPage: React.FC = () => {
   };
 
   const isDrawing = player && gameState.players.find(p => p.id === player.id)?.isDrawing;
+  const isHost = player && gameState.players.length > 0 && gameState.players[0].id === player.id;
 
+  // Show lobby if game hasn't started yet
+  if (!gameState.isPlaying && gameState.currentRound === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white">
+        {/* Header */}
+        <header className="bg-purple-800 text-white p-4">
+          <div className="container mx-auto flex justify-between items-center">
+            <div className="flex items-center">
+              <button 
+                onClick={goHome}
+                className="p-2 rounded-full hover:bg-purple-700 transition-colors mr-2"
+              >
+                <Home size={20} />
+              </button>
+              <h1 className="text-xl font-bold text-white">Scribble Draw & Guess</h1>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center text-white">
+                <Users size={20} className="mr-1" />
+                <span>{gameState.players.length} players</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Lobby Content */}
+        <div className="container mx-auto p-6">
+          <div className="max-w-4xl mx-auto">
+            {/* Room Info */}
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6 text-center">
+              <h2 className="text-3xl font-bold text-white mb-2">Game Lobby</h2>
+              <div className="text-xl text-purple-200 mb-4">
+                Room Code: <span className="font-mono font-bold text-white bg-white/20 px-3 py-1 rounded-lg">{gameState.roomId}</span>
+              </div>
+              <p className="text-purple-200">
+                {gameState.players.length < 2 
+                  ? "Waiting for more players to join..." 
+                  : isHost 
+                    ? "Ready to start! Click the button below when everyone has joined."
+                    : "Waiting for the host to start the game..."
+                }
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Players List */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <Users size={24} className="mr-2" />
+                  Players ({gameState.players.length})
+                </h3>
+                
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {gameState.players.map((p, index) => (
+                    <div key={p.id} className="flex items-center p-3 bg-white/10 rounded-lg">
+                      <div 
+                        className="w-10 h-10 rounded-full mr-3 flex-shrink-0"
+                        style={{ backgroundColor: p.avatar.color }}
+                      >
+                        {/* Avatar details would go here */}
+                      </div>
+                      <div className="flex-grow">
+                        <div className="font-medium text-white">
+                          {p.name}
+                          {p.id === player?.id && <span className="text-purple-300"> (You)</span>}
+                          {index === 0 && <span className="text-yellow-300"> (Host)</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chat */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden">
+                <div className="h-80">
+                  <ChatBox />
+                </div>
+              </div>
+            </div>
+
+            {/* Start Game Button (only for host) */}
+            {isHost && (
+              <div className="mt-6 text-center">
+                <button
+                  onClick={startGame}
+                  disabled={gameState.players.length < 2}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-colors flex items-center justify-center mx-auto text-lg"
+                >
+                  <Play size={24} className="mr-2" />
+                  Start Game
+                </button>
+                {gameState.players.length < 2 && (
+                  <p className="text-amber-300 mt-2">
+                    At least 2 players needed to start
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Game is active - show the main game interface
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex flex-col">
       {/* Game header */}
       <header className="bg-purple-800 text-white p-4">
         <div className="container mx-auto flex justify-between items-center">
@@ -62,10 +170,10 @@ const GameRoomPage: React.FC = () => {
             >
               <Home size={20} />
             </button>
-            <h1 className="text-xl font-bold">Scribble Draw & Guess</h1>
+            <h1 className="text-xl font-bold text-white">Scribble Draw & Guess</h1>
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 text-white">
             <div className="flex items-center">
               <Clock size={20} className="mr-1" />
               <span className="font-mono">
@@ -85,19 +193,19 @@ const GameRoomPage: React.FC = () => {
           {gameState.isPlaying ? (
             isDrawing ? (
               <div>
-                <span className="font-bold text-lg">Your word:</span>{' '}
-                <span className="text-xl font-bold">{gameState.currentWord}</span>
+                <span className="font-bold text-lg text-white">Your word:</span>{' '}
+                <span className="text-xl font-bold text-yellow-300">{gameState.currentWord}</span>
               </div>
             ) : (
               <div>
-                <span className="font-bold text-lg">Guess the word:</span>{' '}
-                <span className="text-xl font-mono tracking-wider">
+                <span className="font-bold text-lg text-white">Guess the word:</span>{' '}
+                <span className="text-xl font-mono tracking-wider text-yellow-300">
                   {gameState.revealedWord}
                 </span>
               </div>
             )
           ) : (
-            <div className="text-lg">
+            <div className="text-lg text-white">
               {gameState.players.length < 2
                 ? "Waiting for more players to join..."
                 : "Waiting for the game to start..."}

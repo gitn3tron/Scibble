@@ -95,12 +95,12 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
   
   return (
     <div className="flex flex-col h-full">
-      <div className="p-2 bg-gray-50 border-b flex items-center">
+      <div className="p-3 bg-gray-50 border-b flex items-center">
         <Users size={18} className="text-purple-600 mr-2" />
-        <h3 className="font-semibold">Players ({players.length})</h3>
+        <h3 className="font-semibold text-gray-800">Players ({players.length})</h3>
       </div>
       
-      <div className="flex-grow overflow-y-auto">
+      <div className="flex-grow overflow-y-auto bg-white">
         {sortedPlayers.length > 0 ? (
           <div className="divide-y">
             {sortedPlayers.map((player, index) => (
@@ -119,13 +119,13 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
                 </div>
                 
                 <div className="ml-3 flex-grow">
-                  <div className="font-medium">
+                  <div className="font-medium text-gray-800">
                     {player.name}
-                    {player.id === currentPlayerId && ' (You)'}
+                    {player.id === currentPlayerId && <span className="text-purple-600"> (You)</span>}
                   </div>
                 </div>
                 
-                <div className="font-bold text-lg">
+                <div className="font-bold text-lg text-gray-800">
                   {player.score}
                 </div>
               </div>
