@@ -53,6 +53,7 @@ function createRoom(roomId, settings, hostPlayer) {
       currentRound: 0,
       currentDrawer: null,
       currentWord: '',
+      wordChoices: [],
       timeLeft: 0,
       scores: {},
       messages: [],
@@ -66,8 +67,9 @@ function createRoom(roomId, settings, hostPlayer) {
   return room;
 }
 
-function getRandomWord(wordList) {
-  return wordList[Math.floor(Math.random() * wordList.length)];
+function getRandomWords(wordList, count = 3) {
+  const shuffled = [...wordList].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, Math.min(count, wordList.length));
 }
 
 function createRevealedWord(word, hintsRevealed = 0) {
@@ -116,12 +118,50 @@ function startRound(room) {
   const nextDrawer = room.players[nextDrawerIndex];
   
   room.gameState.currentDrawer = nextDrawer.id;
-  room.gameState.currentWord = getRandomWord(room.gameState.wordList);
+  
+  // Generate word choices for the drawer
+  room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
   
   // Update player drawing status
   room.players.forEach(player => {
     player.isDrawing = player.id === nextDrawer.id;
   });
+  
+  // Notify drawer about word choices
+  const drawerSocket = players.get(nextDrawer.id);
+  if (drawerSocket) {
+    drawerSocket.emit('word-choices', {
+      choices: room.gameState.wordChoices,
+      timeLimit: 15 // 15 seconds to choose
+    });
+  }
+  
+  // Notify other players that drawer is choosing
+  room.players.forEach(player => {
+    if (player.id !== nextDrawer.id) {
+      const socket = players.get(player.id);
+      if (socket) {
+        socket.emit('drawer-choosing', {
+          currentRound: room.gameState.currentRound,
+          drawingPlayerName: nextDrawer.name,
+          timeLeft: 15
+        });
+      }
+    }
+  });
+  
+  // Start word selection timer
+  setTimeout(() => {
+    if (rooms.has(room.id) && !room.gameState.currentWord) {
+      // Auto-select first word if drawer didn't choose
+      selectWord(room, room.gameState.wordChoices[0]);
+    }
+  }, 15000);
+}
+
+function selectWord(room, selectedWord) {
+  room.gameState.currentWord = selectedWord;
+  room.gameState.wordChoices = [];
   
   const revealedWord = createRevealedWord(room.gameState.currentWord);
   
@@ -132,8 +172,8 @@ function startRound(room) {
       socket.emit('round-started', {
         currentRound: room.gameState.currentRound,
         timeLeft: room.gameState.timeLeft,
-        drawingPlayerId: nextDrawer.id,
-        currentWord: player.id === nextDrawer.id ? room.gameState.currentWord : undefined,
+        drawingPlayerId: room.gameState.currentDrawer,
+        currentWord: player.id === room.gameState.currentDrawer ? room.gameState.currentWord : undefined,
         revealedWord: revealedWord
       });
     }
@@ -191,6 +231,7 @@ function endRound(room) {
   
   // Reset round state
   room.gameState.currentWord = '';
+  room.gameState.wordChoices = [];
   room.gameState.hintsRevealed = 0;
   
   // Check if game should end
@@ -388,6 +429,24 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('❌ Error starting game:', error);
       socket.emit('error', { message: 'Failed to start game' });
+    }
+  });
+
+  socket.on('word-selected', (data) => {
+    console.log('📝 Received word-selected event:', data);
+    
+    try {
+      const { roomId, selectedWord } = data;
+      const room = rooms.get(roomId);
+      
+      if (!room || !room.gameState.wordChoices.includes(selectedWord)) {
+        return;
+      }
+      
+      selectWord(room, selectedWord);
+      
+    } catch (error) {
+      console.error('❌ Error selecting word:', error);
     }
   });
 
