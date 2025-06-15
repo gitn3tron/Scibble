@@ -7,13 +7,14 @@ import ChatBox from '../components/ChatBox';
 import PlayersList from '../components/PlayersList';
 import GameControls from '../components/GameControls';
 import GameOverScreen from '../components/GameOverScreen';
+import WordSelection from '../components/WordSelection';
 import { Clock, Home, Play, Users, Crown } from 'lucide-react';
 
 const GameRoomPage: React.FC = () => {
   const navigate = useNavigate();
   const { roomId } = useParams<{ roomId: string }>();
   const { socket, connected } = useSocket();
-  const { player, gameState, joinRoom, startGame, leaveRoom } = useGame();
+  const { player, gameState, joinRoom, startGame, leaveRoom, selectWord } = useGame();
   const [showGameOver, setShowGameOver] = useState(false);
 
   useEffect(() => {
@@ -117,6 +118,45 @@ const GameRoomPage: React.FC = () => {
       </div>
     );
   };
+
+  // Show word selection modal if player is choosing word
+  if (gameState.isChoosingWord && gameState.wordChoices.length > 0 && isDrawing) {
+    return (
+      <>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Get ready to draw!</h2>
+            <p className="text-purple-200">Choose your word...</p>
+          </div>
+        </div>
+        <WordSelection
+          words={gameState.wordChoices}
+          timeLeft={gameState.timeLeft}
+          onWordSelect={selectWord}
+        />
+      </>
+    );
+  }
+
+  // Show waiting screen if someone else is choosing word
+  if (gameState.currentRound > 0 && gameState.timeLeft <= 15 && !gameState.currentWord && !isDrawing) {
+    const drawer = gameState.players.find(p => p.isDrawing);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold mb-2">Round {gameState.currentRound}</h2>
+          <p className="text-purple-200">
+            {drawer?.name} is choosing a word to draw...
+          </p>
+          <div className="mt-4 flex items-center justify-center text-orange-300">
+            <Clock size={20} className="mr-2" />
+            <span className="font-mono text-lg">{gameState.timeLeft}s</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show lobby if game hasn't started yet
   if (!gameState.isPlaying && gameState.currentRound === 0) {
@@ -307,12 +347,6 @@ const GameRoomPage: React.FC = () => {
               roomId={gameState.roomId || ''} 
             />
           </div>
-          
-          {isDrawing && (
-            <div className="p-2 bg-gray-50 border-t">
-              <GameControls />
-            </div>
-          )}
         </div>
 
         {/* Players list */}

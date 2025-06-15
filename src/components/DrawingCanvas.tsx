@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { Paintbrush, Eraser, RefreshCw, Palette } from 'lucide-react';
+import { Paintbrush, Eraser, RefreshCw, Palette, Undo2, Redo2 } from 'lucide-react';
 
 interface DrawingCanvasProps {
   isDrawing: boolean;
@@ -12,6 +12,11 @@ interface Point {
   y: number;
 }
 
+interface DrawingState {
+  imageData: ImageData;
+  timestamp: number;
+}
+
 const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { socket } = useSocket();
@@ -21,6 +26,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
   const [color, setColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(5);
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [undoStack, setUndoStack] = useState<DrawingState[]>([]);
+  const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
 
   // Initialize canvas
   useEffect(() => {
@@ -39,8 +47,17 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     context.lineCap = 'round';
     context.lineWidth = brushSize;
     context.strokeStyle = color;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
 
     setCtx(context);
+
+    // Save initial state
+    const initialState: DrawingState = {
+      imageData: context.getImageData(0, 0, canvas.width, canvas.height),
+      timestamp: Date.now()
+    };
+    setUndoStack([initialState]);
 
     // Handle window resize
     const handleResize = () => {
@@ -57,6 +74,32 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Clear canvas when new round starts
+  useEffect(() => {
+    if (!ctx || !canvasRef.current) return;
+    
+    // Listen for round changes to clear canvas
+    const clearCanvasForNewRound = () => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
+      
+      // Reset undo/redo stacks
+      const initialState: DrawingState = {
+        imageData: ctx.getImageData(0, 0, canvasRef.current!.width, canvasRef.current!.height),
+        timestamp: Date.now()
+      };
+      setUndoStack([initialState]);
+      setRedoStack([]);
+    };
+
+    if (socket) {
+      socket.on('round-started', clearCanvasForNewRound);
+      return () => {
+        socket.off('round-started', clearCanvasForNewRound);
+      };
+    }
+  }, [socket, ctx]);
 
   // Update brush size and color
   useEffect(() => {
@@ -86,7 +129,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     });
 
     socket.on('clear-canvas', () => {
-      clearCanvas();
+      clearCanvas(false);
     });
 
     return () => {
@@ -95,12 +138,25 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
   }, [socket, ctx]);
 
+  const saveState = () => {
+    if (!ctx || !canvasRef.current) return;
+    
+    const newState: DrawingState = {
+      imageData: ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height),
+      timestamp: Date.now()
+    };
+    
+    setUndoStack(prev => [...prev.slice(-19), newState]); // Keep last 20 states
+    setRedoStack([]); // Clear redo stack when new action is performed
+  };
+
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !ctx) return;
     
     const point = getPointerPosition(e);
     setDrawing(true);
     setLastPoint(point);
+    saveState(); // Save state before starting to draw
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -158,16 +214,46 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
   };
 
-  const clearCanvas = () => {
+  const clearCanvas = (broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     
-    if (socket && roomId && isDrawing) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    
+    if (broadcast && socket && roomId && isDrawing) {
       socket.emit('clear', { roomId });
     }
+    
+    saveState();
   };
 
-  const colorOptions = ['#000000', '#ff0000', '#0000ff', '#00ff00', '#ffff00', '#ff00ff', '#00ffff', '#ff9900'];
+  const undo = () => {
+    if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
+    
+    const currentState = undoStack[undoStack.length - 1];
+    const previousState = undoStack[undoStack.length - 2];
+    
+    setRedoStack(prev => [...prev, currentState]);
+    setUndoStack(prev => prev.slice(0, -1));
+    
+    ctx.putImageData(previousState.imageData, 0, 0);
+  };
+
+  const redo = () => {
+    if (!ctx || !canvasRef.current || redoStack.length === 0) return;
+    
+    const stateToRestore = redoStack[redoStack.length - 1];
+    
+    setUndoStack(prev => [...prev, stateToRestore]);
+    setRedoStack(prev => prev.slice(0, -1));
+    
+    ctx.putImageData(stateToRestore.imageData, 0, 0);
+  };
+
+  const colorOptions = [
+    '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', 
+    '#FF00FF', '#00FFFF', '#FF9900', '#9900FF', '#99FF00', '#FF0099'
+  ];
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -196,56 +282,99 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       </div>
       
       {isDrawing && (
-        <div className="flex items-center justify-center space-x-3 pt-2">
+        <div className="flex items-center justify-center space-x-3 pt-3 pb-2 bg-gray-50 rounded-b-lg">
+          {/* Tool Selection */}
           <button
             onClick={() => setTool('brush')}
-            className={`p-2 rounded-full ${
-              tool === 'brush' ? 'bg-purple-600 text-white' : 'bg-gray-200'
+            className={`p-2 rounded-full transition-colors ${
+              tool === 'brush' ? 'bg-purple-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
             }`}
+            title="Brush"
           >
             <Paintbrush size={18} />
           </button>
           
           <button
             onClick={() => setTool('eraser')}
-            className={`p-2 rounded-full ${
-              tool === 'eraser' ? 'bg-purple-600 text-white' : 'bg-gray-200'
+            className={`p-2 rounded-full transition-colors ${
+              tool === 'eraser' ? 'bg-purple-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
             }`}
+            title="Eraser"
           >
             <Eraser size={18} />
           </button>
           
-          <div className="relative group">
-            <button className="p-2 rounded-full bg-gray-200 flex items-center justify-center">
+          {/* Color Picker */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex items-center justify-center"
+              title="Colors"
+            >
               <Palette size={18} style={{ color }}/>
             </button>
             
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:flex bg-white p-2 rounded-lg shadow-lg z-10 flex-wrap justify-center w-[140px]">
-              {colorOptions.map((c) => (
-                <button
-                  key={c}
-                  className={`w-6 h-6 m-1 rounded-full ${
-                    color === c ? 'ring-2 ring-offset-1 ring-gray-400' : ''
-                  }`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
-            </div>
+            {showColorPicker && (
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white p-3 rounded-lg shadow-lg z-10 border">
+                <div className="grid grid-cols-4 gap-2 w-32">
+                  {colorOptions.map((c) => (
+                    <button
+                      key={c}
+                      className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                        color === c ? 'border-gray-400 scale-110' : 'border-gray-200'
+                      }`}
+                      style={{ backgroundColor: c }}
+                      onClick={() => {
+                        setColor(c);
+                        setShowColorPicker(false);
+                      }}
+                      title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
-          <input
-            type="range"
-            min="1"
-            max="20"
-            value={brushSize}
-            onChange={(e) => setBrushSize(parseInt(e.target.value))}
-            className="w-24"
-          />
+          {/* Brush Size */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600">Size:</span>
+            <input
+              type="range"
+              min="1"
+              max="20"
+              value={brushSize}
+              onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              className="w-20"
+              title={`Brush size: ${brushSize}px`}
+            />
+            <span className="text-sm text-gray-600 w-6">{brushSize}</span>
+          </div>
+          
+          {/* Undo/Redo */}
+          <button
+            onClick={undo}
+            disabled={undoStack.length <= 1}
+            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
+            title="Undo"
+          >
+            <Undo2 size={18} />
+          </button>
           
           <button
-            onClick={clearCanvas}
-            className="p-2 rounded-full bg-red-500 text-white"
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
+            title="Redo"
+          >
+            <Redo2 size={18} />
+          </button>
+          
+          {/* Clear Canvas */}
+          <button
+            onClick={() => clearCanvas()}
+            className="p-2 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
+            title="Clear canvas"
           >
             <RefreshCw size={18} />
           </button>
