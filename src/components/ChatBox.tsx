@@ -86,12 +86,12 @@ const ChatBox: React.FC = () => {
           onChange={(e) => setMessage(e.target.value)}
           placeholder={gameState.isPlaying ? "Type your guess..." : "Type a message..."}
           className="flex-grow px-3 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
-          disabled={!player || !gameState.roomId || (player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
+          disabled={!player || !gameState.roomId || (gameState.isPlaying && player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
         />
         <button
           type="submit"
           className="bg-purple-600 text-white px-4 py-2 rounded-r-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          disabled={!message.trim() || !player || !gameState.roomId || (player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
+          disabled={!message.trim() || !player || !gameState.roomId || (gameState.isPlaying && player && gameState.players.find(p => p.id === player.id)?.isDrawing)}
         >
           <Send size={18} />
         </button>

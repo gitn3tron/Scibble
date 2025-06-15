@@ -7,7 +7,7 @@ import ChatBox from '../components/ChatBox';
 import PlayersList from '../components/PlayersList';
 import GameControls from '../components/GameControls';
 import GameOverScreen from '../components/GameOverScreen';
-import { Clock, Home, Play, Users } from 'lucide-react';
+import { Clock, Home, Play, Users, Crown } from 'lucide-react';
 
 const GameRoomPage: React.FC = () => {
   const navigate = useNavigate();
@@ -49,7 +49,74 @@ const GameRoomPage: React.FC = () => {
   };
 
   const isDrawing = player && gameState.players.find(p => p.id === player.id)?.isDrawing;
+  // Host is the FIRST player in the room (index 0), not the last
   const isHost = player && gameState.players.length > 0 && gameState.players[0].id === player.id;
+
+  const renderPlayerAvatar = (player: any) => {
+    const renderEyes = () => {
+      switch (player.avatar.eyes) {
+        case 'happy':
+          return (
+            <>
+              <div className="w-1 h-0.5 bg-black rounded-t-full absolute left-1/4 top-1/3"></div>
+              <div className="w-1 h-0.5 bg-black rounded-t-full absolute right-1/4 top-1/3"></div>
+            </>
+          );
+        case 'wink':
+          return (
+            <>
+              <div className="w-1 h-1 bg-black rounded-full absolute left-1/4 top-1/3"></div>
+              <div className="w-1 h-0.5 bg-black rounded-t-full absolute right-1/4 top-1/3"></div>
+            </>
+          );
+        case 'surprised':
+          return (
+            <>
+              <div className="w-1 h-1 bg-black rounded-full absolute left-1/4 top-1/3"></div>
+              <div className="w-1 h-1 bg-black rounded-full absolute right-1/4 top-1/3"></div>
+            </>
+          );
+        default: // normal
+          return (
+            <>
+              <div className="w-1 h-1 bg-black rounded-full absolute left-1/4 top-1/3"></div>
+              <div className="w-1 h-1 bg-black rounded-full absolute right-1/4 top-1/3"></div>
+            </>
+          );
+      }
+    };
+
+    const renderMouth = () => {
+      switch (player.avatar.mouth) {
+        case 'laugh':
+          return (
+            <div className="w-3 h-1.5 bg-black rounded-b-full absolute left-1/2 bottom-1/4 transform -translate-x-1/2"></div>
+          );
+        case 'neutral':
+          return (
+            <div className="w-3 h-0.5 bg-black absolute left-1/2 bottom-1/4 transform -translate-x-1/2"></div>
+          );
+        case 'surprised':
+          return (
+            <div className="w-2 h-2 bg-black rounded-full absolute left-1/2 bottom-1/5 transform -translate-x-1/2"></div>
+          );
+        default: // smile
+          return (
+            <div className="w-3 h-1.5 border-b-1 border-black absolute left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full"></div>
+          );
+      }
+    };
+
+    return (
+      <div 
+        className="w-10 h-10 rounded-full relative transition-all duration-300" 
+        style={{ backgroundColor: player.avatar.color }}
+      >
+        {renderEyes()}
+        {renderMouth()}
+      </div>
+    );
+  };
 
   // Show lobby if game hasn't started yet
   if (!gameState.isPlaying && gameState.currentRound === 0) {
@@ -107,17 +174,17 @@ const GameRoomPage: React.FC = () => {
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {gameState.players.map((p, index) => (
                     <div key={p.id} className="flex items-center p-3 bg-white/10 rounded-lg">
-                      <div 
-                        className="w-10 h-10 rounded-full mr-3 flex-shrink-0"
-                        style={{ backgroundColor: p.avatar.color }}
-                      >
-                        {/* Avatar details would go here */}
-                      </div>
-                      <div className="flex-grow">
-                        <div className="font-medium text-white">
+                      {renderPlayerAvatar(p)}
+                      <div className="flex-grow ml-3">
+                        <div className="font-medium text-white flex items-center">
                           {p.name}
-                          {p.id === player?.id && <span className="text-purple-300"> (You)</span>}
-                          {index === 0 && <span className="text-yellow-300"> (Host)</span>}
+                          {p.id === player?.id && <span className="text-purple-300 ml-1"> (You)</span>}
+                          {index === 0 && (
+                            <div className="flex items-center ml-2">
+                              <Crown size={16} className="text-yellow-400 mr-1" />
+                              <span className="text-yellow-300 text-sm">Host</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -139,16 +206,27 @@ const GameRoomPage: React.FC = () => {
                 <button
                   onClick={startGame}
                   disabled={gameState.players.length < 2}
-                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-colors flex items-center justify-center mx-auto text-lg"
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-colors flex items-center justify-center mx-auto text-lg shadow-lg"
                 >
                   <Play size={24} className="mr-2" />
                   Start Game
                 </button>
                 {gameState.players.length < 2 && (
-                  <p className="text-amber-300 mt-2">
+                  <p className="text-amber-300 mt-2 font-medium">
                     At least 2 players needed to start
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Non-host message */}
+            {!isHost && gameState.players.length >= 2 && (
+              <div className="mt-6 text-center">
+                <div className="bg-blue-500/20 backdrop-blur-sm rounded-xl p-4">
+                  <p className="text-blue-200 font-medium">
+                    Waiting for {gameState.players[0]?.name} (Host) to start the game...
+                  </p>
+                </div>
               </div>
             )}
           </div>

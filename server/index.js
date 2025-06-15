@@ -46,7 +46,7 @@ function generateRoomId() {
 function createRoom(roomId, settings, hostPlayer) {
   const room = {
     id: roomId,
-    players: [hostPlayer],
+    players: [hostPlayer], // Host is ALWAYS the first player (index 0)
     settings,
     gameState: {
       isPlaying: false,
@@ -200,6 +200,7 @@ function endGame(room) {
 
 function addMessage(room, message) {
   room.gameState.messages.push(message);
+  // Broadcast to ALL players in the room
   io.to(room.id).emit('new-message', message);
 }
 
@@ -221,13 +222,13 @@ io.on('connection', (socket) => {
       // Store player socket mapping
       players.set(player.id, socket);
       
-      // Create room
+      // Create room with host as FIRST player
       const room = createRoom(roomId, settings, player);
       
       // Join socket to room
       socket.join(roomId);
       
-      console.log(`✅ Room ${roomId} created successfully`);
+      console.log(`✅ Room ${roomId} created successfully with host: ${player.name}`);
       
       // Send response to client
       socket.emit('room-created', { roomId });
@@ -261,18 +262,38 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Initialize player
+      // Check if player is already in room (reconnection)
+      const existingPlayerIndex = room.players.findIndex(p => p.id === player.id);
+      if (existingPlayerIndex !== -1) {
+        // Update existing player's socket
+        players.set(player.id, socket);
+        socket.join(roomId);
+        
+        console.log(`🔄 Player ${player.name} reconnected to room ${roomId}`);
+        
+        // Send current room state
+        socket.emit('player-joined', { players: room.players });
+        
+        // Send existing messages
+        room.gameState.messages.forEach(message => {
+          socket.emit('new-message', message);
+        });
+        
+        return;
+      }
+      
+      // Initialize new player
       player.score = 0;
       player.isDrawing = false;
       
-      // Add player to room
+      // Add player to room (host remains at index 0)
       room.players.push(player);
       players.set(player.id, socket);
       
       // Join socket to room
       socket.join(roomId);
       
-      console.log(`✅ Player ${player.name} joined room ${roomId}`);
+      console.log(`✅ Player ${player.name} joined room ${roomId}. Host: ${room.players[0].name}`);
       
       // Notify all players in room
       io.to(roomId).emit('player-joined', { players: room.players });
@@ -307,6 +328,13 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if the player starting the game is the host (first player)
+      const playerSocket = players.get(room.players[0].id);
+      if (playerSocket?.id !== socket.id) {
+        socket.emit('error', { message: 'Only the host can start the game' });
+        return;
+      }
+      
       if (room.players.length < 2) {
         socket.emit('error', { message: 'Need at least 2 players to start' });
         return;
@@ -320,7 +348,7 @@ io.on('connection', (socket) => {
         room.gameState.scores[player.id] = 0;
       });
       
-      console.log(`✅ Game started for room ${roomId}`);
+      console.log(`✅ Game started for room ${roomId} by host: ${room.players[0].name}`);
       
       // Notify all players
       io.to(roomId).emit('game-started', {
@@ -349,12 +377,18 @@ io.on('connection', (socket) => {
       const { roomId, playerId, playerName, text } = data;
       const room = rooms.get(roomId);
       
-      if (!room) return;
+      if (!room) {
+        console.log('❌ Room not found for message');
+        return;
+      }
       
       const player = room.players.find(p => p.id === playerId);
-      if (!player) return;
+      if (!player) {
+        console.log('❌ Player not found for message');
+        return;
+      }
       
-      // Check if it's a correct guess
+      // Check if it's a correct guess during gameplay
       if (room.gameState.isPlaying && 
           room.gameState.currentWord && 
           text.toLowerCase().trim() === room.gameState.currentWord.toLowerCase() &&
@@ -383,8 +417,8 @@ io.on('connection', (socket) => {
         // End round if someone guessed correctly
         endRound(room);
         
-      } else if (!player.isDrawing) {
-        // Regular chat message (only if not drawing)
+      } else if (!room.gameState.isPlaying || !player.isDrawing) {
+        // Regular chat message (allowed in lobby or if not drawing during game)
         const message = {
           id: uuidv4(),
           playerId: playerId,
@@ -394,6 +428,7 @@ io.on('connection', (socket) => {
           timestamp: Date.now()
         };
         
+        console.log(`💬 Broadcasting message from ${playerName} to room ${roomId}`);
         addMessage(room, message);
       }
       
@@ -441,6 +476,8 @@ io.on('connection', (socket) => {
       
       if (!room) return;
       
+      const leavingPlayerName = room.players.find(p => p.id === playerId)?.name || 'A player';
+      
       // Remove player from room
       room.players = room.players.filter(p => p.id !== playerId);
       players.delete(playerId);
@@ -463,7 +500,7 @@ io.on('connection', (socket) => {
           id: uuidv4(),
           playerId: 'system',
           playerName: 'System',
-          text: `A player left the game`,
+          text: `${leavingPlayerName} left the game`,
           type: 'system',
           timestamp: Date.now()
         };
@@ -486,6 +523,8 @@ io.on('connection', (socket) => {
         for (const [roomId, room] of rooms.entries()) {
           const playerIndex = room.players.findIndex(p => p.id === playerId);
           if (playerIndex !== -1) {
+            const disconnectedPlayerName = room.players[playerIndex].name;
+            
             // Remove player
             room.players.splice(playerIndex, 1);
             players.delete(playerId);
@@ -500,6 +539,17 @@ io.on('connection', (socket) => {
             } else {
               // Notify remaining players
               io.to(roomId).emit('player-joined', { players: room.players });
+              
+              const disconnectMessage = {
+                id: uuidv4(),
+                playerId: 'system',
+                playerName: 'System',
+                text: `${disconnectedPlayerName} disconnected`,
+                type: 'system',
+                timestamp: Date.now()
+              };
+              
+              addMessage(room, disconnectMessage);
             }
             break;
           }
