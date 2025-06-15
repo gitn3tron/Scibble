@@ -24,8 +24,6 @@ interface GameState {
   hints: number;
   isPlaying: boolean;
   messages: Message[];
-  wordChoices: string[];
-  isChoosingWord: boolean;
 }
 
 interface Message {
@@ -46,7 +44,6 @@ interface GameContextType {
   startGame: () => void;
   sendMessage: (message: string) => void;
   leaveRoom: () => void;
-  selectWord: (word: string) => void;
 }
 
 interface GameSettings {
@@ -70,8 +67,6 @@ const initialGameState: GameState = {
   hints: 0,
   isPlaying: false,
   messages: [],
-  wordChoices: [],
-  isChoosingWord: false,
 };
 
 const GameContext = createContext<GameContextType>({
@@ -83,7 +78,6 @@ const GameContext = createContext<GameContextType>({
   startGame: () => {},
   sendMessage: () => {},
   leaveRoom: () => {},
-  selectWord: () => {},
 });
 
 export const useGame = () => useContext(GameContext);
@@ -113,31 +107,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setGameState(prev => ({ ...prev, ...data, isPlaying: true }));
     });
 
-    socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
-      console.log('📝 Received word-choices event:', data);
-      setGameState(prev => ({
-        ...prev,
-        wordChoices: data.choices,
-        isChoosingWord: true,
-        timeLeft: data.timeLimit
-      }));
-    });
-
-    socket.on('drawer-choosing', (data: {
-      currentRound: number,
-      drawingPlayerName: string,
-      timeLeft: number
-    }) => {
-      console.log('⏳ Received drawer-choosing event:', data);
-      setGameState(prev => ({
-        ...prev,
-        currentRound: data.currentRound,
-        timeLeft: data.timeLeft,
-        isChoosingWord: false,
-        wordChoices: []
-      }));
-    });
-
     socket.on('round-started', (data: {
       currentRound: number,
       timeLeft: number,
@@ -151,8 +120,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentRound: data.currentRound,
         timeLeft: data.timeLeft,
         revealedWord: data.revealedWord,
-        isChoosingWord: false,
-        wordChoices: [],
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -188,7 +155,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
     });
 
-    socket.on('round-ended', (data: { scores: Record<string, number>, correctWord: string }) => {
+    socket.on('round-ended', (data: { scores: Record<string, number> }) => {
       console.log('🏁 Received round-ended event:', data);
       setGameState(prev => ({
         ...prev,
@@ -196,9 +163,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...p,
           score: data.scores[p.id] || p.score,
           isDrawing: false
-        })),
-        currentWord: '',
-        revealedWord: data.correctWord
+        }))
       }));
     });
 
@@ -229,8 +194,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('room-created');
       socket.off('player-joined');
       socket.off('game-started');
-      socket.off('word-choices');
-      socket.off('drawer-choosing');
       socket.off('round-started');
       socket.off('time-update');
       socket.off('hint-revealed');
@@ -298,19 +261,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('✅ start-game event emitted successfully');
   };
 
-  const selectWord = (word: string) => {
-    console.log('📝 selectWord called with:', word);
-    
-    if (!socket || !gameState.roomId) {
-      console.error('❌ No socket connection or roomId for selectWord');
-      return;
-    }
-
-    console.log('📤 Emitting word-selected event to server...');
-    socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
-    console.log('✅ word-selected event emitted successfully');
-  };
-
   const sendMessage = (message: string) => {
     if (socket && player && gameState.roomId) {
       console.log('💬 Sending message:', message);
@@ -343,8 +293,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       joinRoom,
       startGame,
       sendMessage,
-      leaveRoom,
-      selectWord
+      leaveRoom
     }}>
       {children}
     </GameContext.Provider>
