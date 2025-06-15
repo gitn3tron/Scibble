@@ -29,6 +29,15 @@ const RoomCreationPage: React.FC = () => {
     }
   }, [player, navigate]);
 
+  // Auto-navigate to room when created - FIXED: Navigate immediately after room creation
+  useEffect(() => {
+    if (gameState.roomId && isCreating) {
+      console.log('Room created, navigating to room:', gameState.roomId);
+      setIsCreating(false);
+      navigate(`/room/${gameState.roomId}`);
+    }
+  }, [gameState.roomId, navigate, isCreating]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
     
@@ -99,11 +108,6 @@ const RoomCreationPage: React.FC = () => {
       ...settings,
       customWords: customWordsList
     });
-    
-    // Wait for room creation
-    setTimeout(() => {
-      setIsCreating(false);
-    }, 2000);
   };
 
   const copyRoomLink = () => {
@@ -120,12 +124,6 @@ const RoomCreationPage: React.FC = () => {
       navigator.clipboard.writeText(gameState.roomId);
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
-    }
-  };
-
-  const startGame = () => {
-    if (gameState.roomId) {
-      navigate(`/room/${gameState.roomId}`);
     }
   };
 
@@ -154,7 +152,7 @@ const RoomCreationPage: React.FC = () => {
           </div>
         )}
 
-        {connected && !gameState.roomId ? (
+        {connected && (
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -312,91 +310,7 @@ const RoomCreationPage: React.FC = () => {
               </button>
             </div>
           </div>
-        ) : connected && gameState.roomId ? (
-          <div className="p-6">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold mb-4">Room Created!</h2>
-              
-              {/* Room Code Display - Most Prominent */}
-              <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border-2 border-purple-200">
-                <p className="text-sm text-gray-600 mb-2">Share this room code with friends:</p>
-                <div className="flex items-center justify-center space-x-3">
-                  <div className="text-3xl font-bold text-purple-700 tracking-wider font-mono bg-white px-4 py-2 rounded-lg shadow-sm">
-                    {gameState.roomId}
-                  </div>
-                  <button
-                    onClick={copyRoomCode}
-                    className="p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm"
-                    title="Copy room code"
-                  >
-                    {codeCopied ? <Check size={20} /> : <Copy size={20} />}
-                  </button>
-                </div>
-                {codeCopied && (
-                  <p className="text-green-600 text-sm mt-2 font-medium">Room code copied!</p>
-                )}
-              </div>
-
-              {/* Full Link - Secondary Option */}
-              <div className="mb-6">
-                <p className="text-gray-600 text-sm mb-2">Or share the full link:</p>
-                <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center">
-                  <span className="text-gray-800 truncate text-sm">
-                    {`${window.location.origin}/room/${gameState.roomId}`}
-                  </span>
-                  <button
-                    onClick={copyRoomLink}
-                    className="ml-2 p-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
-                    title="Copy full link"
-                  >
-                    {copied ? <Check size={16} /> : <Clipboard size={16} />}
-                  </button>
-                </div>
-                {copied && (
-                  <p className="text-green-600 text-xs mt-1">Link copied!</p>
-                )}
-              </div>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="font-semibold mb-2">Players ({gameState.players.length}/{settings.totalPlayers})</h3>
-              
-              <div className="max-h-48 overflow-y-auto bg-gray-50 rounded-lg p-2">
-                {gameState.players.length > 0 ? (
-                  gameState.players.map((p) => (
-                    <div key={p.id} className="flex items-center p-2">
-                      <div 
-                        className="w-8 h-8 rounded-full mr-2"
-                        style={{ backgroundColor: p.avatar.color }}
-                      ></div>
-                      <span>{p.name}{p.id === player.id ? ' (You)' : ''}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center p-4">
-                    Waiting for players to join...
-                  </p>
-                )}
-              </div>
-            </div>
-            
-            <div className="mt-6">
-              <button
-                onClick={startGame}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
-                disabled={gameState.players.length < 2}
-              >
-                <Play size={20} className="mr-2" />
-                Start Game
-              </button>
-              {gameState.players.length < 2 && (
-                <p className="text-amber-600 text-center text-sm mt-2">
-                  At least 2 players needed to start
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

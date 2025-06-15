@@ -56,7 +56,8 @@ function createRoom(roomId, settings, hostPlayer) {
       timeLeft: 0,
       scores: {},
       messages: [],
-      wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords]
+      wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords],
+      hintsRevealed: 0
     },
     timer: null
   };
@@ -75,14 +76,23 @@ function createRevealedWord(word, hintsRevealed = 0) {
   }
   
   const wordArray = word.split('');
-  const lettersToReveal = Math.min(hintsRevealed, Math.floor(word.length / 2));
-  const revealedIndices = new Set();
+  const letterIndices = [];
   
-  while (revealedIndices.size < lettersToReveal) {
-    const randomIndex = Math.floor(Math.random() * word.length);
-    if (word[randomIndex].match(/[a-zA-Z]/)) {
-      revealedIndices.add(randomIndex);
+  // Get all letter positions
+  for (let i = 0; i < word.length; i++) {
+    if (word[i].match(/[a-zA-Z]/)) {
+      letterIndices.push(i);
     }
+  }
+  
+  // Calculate how many letters to reveal based on hints - FIXED
+  const lettersToReveal = Math.min(hintsRevealed, Math.floor(letterIndices.length * 0.6));
+  
+  // Randomly select which letters to reveal
+  const revealedIndices = new Set();
+  while (revealedIndices.size < lettersToReveal && revealedIndices.size < letterIndices.length) {
+    const randomIndex = letterIndices[Math.floor(Math.random() * letterIndices.length)];
+    revealedIndices.add(randomIndex);
   }
   
   return wordArray.map((char, index) => {
@@ -98,6 +108,7 @@ function startRound(room) {
   
   room.gameState.currentRound++;
   room.gameState.timeLeft = room.settings.drawTime;
+  room.gameState.hintsRevealed = 0;
   
   // Select next drawer (rotate through players)
   const currentDrawerIndex = room.players.findIndex(p => p.id === room.gameState.currentDrawer);
@@ -135,13 +146,16 @@ function startRound(room) {
     // Broadcast time update
     io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
     
-    // Check for hints
-    const hintInterval = Math.floor(room.settings.drawTime / (room.settings.hintsCount + 1));
-    const hintsGiven = Math.floor((room.settings.drawTime - room.gameState.timeLeft) / hintInterval);
-    
-    if (hintsGiven > 0 && hintsGiven <= room.settings.hintsCount) {
-      const newRevealedWord = createRevealedWord(room.gameState.currentWord, hintsGiven);
-      io.to(room.id).emit('hint-revealed', { revealedWord: newRevealedWord });
+    // Check for hints based on settings - FIXED
+    if (room.settings.hintsCount > 0) {
+      const hintInterval = Math.floor(room.settings.drawTime / (room.settings.hintsCount + 1));
+      const hintsToGive = Math.floor((room.settings.drawTime - room.gameState.timeLeft) / hintInterval);
+      
+      if (hintsToGive > room.gameState.hintsRevealed && hintsToGive <= room.settings.hintsCount) {
+        room.gameState.hintsRevealed = hintsToGive;
+        const newRevealedWord = createRevealedWord(room.gameState.currentWord, room.gameState.hintsRevealed);
+        io.to(room.id).emit('hint-revealed', { revealedWord: newRevealedWord });
+      }
     }
     
     // End round when time is up
@@ -164,13 +178,20 @@ function endRound(room) {
     player.isDrawing = false;
   });
   
-  // Broadcast round end
+  // Broadcast round end with the correct word
   const scores = {};
   room.players.forEach(player => {
     scores[player.id] = player.score;
   });
   
-  io.to(room.id).emit('round-ended', { scores });
+  io.to(room.id).emit('round-ended', { 
+    scores,
+    correctWord: room.gameState.currentWord
+  });
+  
+  // Reset round state
+  room.gameState.currentWord = '';
+  room.gameState.hintsRevealed = 0;
   
   // Check if game should end
   if (room.gameState.currentRound >= room.settings.totalRounds) {
@@ -181,7 +202,7 @@ function endRound(room) {
       if (rooms.has(room.id)) {
         startRound(room);
       }
-    }, 3000);
+    }, 5000);
   }
 }
 

@@ -5,7 +5,6 @@ import { useSocket } from '../context/SocketContext';
 import DrawingCanvas from '../components/DrawingCanvas';
 import ChatBox from '../components/ChatBox';
 import PlayersList from '../components/PlayersList';
-import GameControls from '../components/GameControls';
 import GameOverScreen from '../components/GameOverScreen';
 import { Clock, Home, Play, Users, Crown } from 'lucide-react';
 
@@ -307,12 +306,6 @@ const GameRoomPage: React.FC = () => {
               roomId={gameState.roomId || ''} 
             />
           </div>
-          
-          {isDrawing && (
-            <div className="p-2 bg-gray-50 border-t">
-              <GameControls />
-            </div>
-          )}
         </div>
 
         {/* Players list */}
