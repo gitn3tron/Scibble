@@ -218,6 +218,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Add error event listener
     socket.on('error', (error: any) => {
       console.error('❌ Socket error:', error);
+      alert(error.message || 'An error occurred');
     });
 
     socket.on('connect_error', (error: any) => {

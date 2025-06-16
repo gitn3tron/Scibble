@@ -281,20 +281,34 @@ io.on('connection', (socket) => {
       player.score = 0;
       player.isDrawing = false;
       
-      // Store player socket mapping
+      // Store player socket mapping FIRST
       players.set(player.id, socket);
       
       // Create room with host as FIRST player
       const room = createRoom(roomId, settings, player);
       
-      // Join socket to room
+      // Join socket to room IMMEDIATELY
       socket.join(roomId);
       
       console.log(`✅ Room ${roomId} created successfully with host: ${player.name}`);
       
-      // Send response to client
+      // Send response to client - FIXED: Send both events
       socket.emit('room-created', { roomId });
+      
+      // Immediately send player list to show host in room
       socket.emit('player-joined', { players: room.players });
+      
+      // Send welcome message
+      const welcomeMessage = {
+        id: uuidv4(),
+        playerId: 'system',
+        playerName: 'System',
+        text: `Welcome to the room! Share the room code: ${roomId}`,
+        type: 'system',
+        timestamp: Date.now()
+      };
+      
+      addMessage(room, welcomeMessage);
       
     } catch (error) {
       console.error('❌ Error creating room:', error);
@@ -310,16 +324,19 @@ io.on('connection', (socket) => {
       const room = rooms.get(roomId);
       
       if (!room) {
+        console.log(`❌ Room ${roomId} not found`);
         socket.emit('error', { message: 'Room not found' });
         return;
       }
       
       if (room.players.length >= room.settings.totalPlayers) {
+        console.log(`❌ Room ${roomId} is full`);
         socket.emit('error', { message: 'Room is full' });
         return;
       }
       
       if (room.gameState.isPlaying) {
+        console.log(`❌ Game in room ${roomId} already in progress`);
         socket.emit('error', { message: 'Game already in progress' });
         return;
       }
@@ -348,16 +365,18 @@ io.on('connection', (socket) => {
       player.score = 0;
       player.isDrawing = false;
       
+      // Store player socket mapping FIRST
+      players.set(player.id, socket);
+      
       // Add player to room (host remains at index 0)
       room.players.push(player);
-      players.set(player.id, socket);
       
       // Join socket to room
       socket.join(roomId);
       
-      console.log(`✅ Player ${player.name} joined room ${roomId}. Host: ${room.players[0].name}`);
+      console.log(`✅ Player ${player.name} joined room ${roomId}. Total players: ${room.players.length}. Host: ${room.players[0].name}`);
       
-      // Notify all players in room
+      // Notify ALL players in room about updated player list
       io.to(roomId).emit('player-joined', { players: room.players });
       
       // Send welcome message
