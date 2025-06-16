@@ -22,12 +22,17 @@ const GameRoomPage: React.FC = () => {
       return;
     }
 
-    if (connected && socket && roomId) {
+    // Only call joinRoom if we're not already in the room and socket is connected
+    if (connected && socket && roomId && gameState.roomId !== roomId) {
+      console.log('Joining room:', roomId);
       joinRoom(roomId);
     }
 
     return () => {
-      leaveRoom();
+      // Only leave room if we're actually in a room
+      if (gameState.roomId) {
+        leaveRoom();
+      }
     };
   }, [connected, socket, roomId, player]);
 

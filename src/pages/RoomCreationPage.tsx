@@ -29,11 +29,12 @@ const RoomCreationPage: React.FC = () => {
     }
   }, [player, navigate]);
 
-  // Auto-navigate to room when created - FIXED: Navigate immediately after room creation
+  // Navigate to room when created - FIXED: Only navigate, don't call joinRoom
   useEffect(() => {
     if (gameState.roomId && isCreating) {
       console.log('Room created, navigating to room:', gameState.roomId);
       setIsCreating(false);
+      // Navigate directly without calling joinRoom since host is already in room
       navigate(`/room/${gameState.roomId}`);
     }
   }, [gameState.roomId, navigate, isCreating]);
