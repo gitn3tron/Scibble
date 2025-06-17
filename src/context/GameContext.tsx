@@ -124,7 +124,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setGameState(prev => ({
         ...prev,
         wordChoices: data.choices,
-        isChoosingWord: true,
+        isChoosingWord: false, // FIXED: Drawing player is not in "choosing" state when they have choices
         timeLeft: data.timeLimit
       }));
     });
@@ -164,8 +164,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drawingPlayerName: data.drawingPlayerName,
         turnNumber: data.turnNumber,
         totalTurns: data.totalTurns,
-        isChoosingWord: false,
-        wordChoices: [],
+        isChoosingWord: false, // FIXED: Clear choosing state when turn actually starts
+        wordChoices: [], // FIXED: Clear word choices when turn starts
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -211,7 +211,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isDrawing: false
         })),
         currentWord: '',
-        revealedWord: data.correctWord
+        revealedWord: data.correctWord,
+        wordChoices: [], // FIXED: Clear word choices when turn ends
+        isChoosingWord: false // FIXED: Clear choosing state when turn ends
       }));
     });
 
@@ -224,7 +226,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...p,
           score: data.finalScores[p.id] || p.score,
           isDrawing: false
-        }))
+        })),
+        wordChoices: [], // FIXED: Clear word choices when game ends
+        isChoosingWord: false // FIXED: Clear choosing state when game ends
       }));
     });
 
@@ -323,6 +327,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('📤 Emitting word-selected event to server...');
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
     console.log('✅ word-selected event emitted successfully');
+    
+    // FIXED: Clear word choices immediately after selection
+    setGameState(prev => ({
+      ...prev,
+      wordChoices: [],
+      isChoosingWord: false
+    }));
   };
 
   const sendMessage = (message: string) => {
