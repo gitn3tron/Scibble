@@ -147,6 +147,8 @@ function startNextTurn(room) {
   // Generate word choices for the drawer
   room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
   
+  console.log(`📝 Generated word choices for ${nextDrawer.name}:`, room.gameState.wordChoices);
+  
   // Update player drawing status
   room.players.forEach(player => {
     player.isDrawing = player.id === nextDrawer.id;
@@ -155,20 +157,22 @@ function startNextTurn(room) {
   // Notify drawer about word choices
   const drawerSocket = players.get(nextDrawer.id);
   if (drawerSocket) {
+    console.log(`📤 Sending word choices to drawer ${nextDrawer.name}:`, room.gameState.wordChoices);
     drawerSocket.emit('word-choices', {
       choices: room.gameState.wordChoices,
       timeLimit: 15 // 15 seconds to choose
     });
   }
   
-  // Notify other players that drawer is choosing - FIXED: Send correct drawer name and round
+  // Notify other players that drawer is choosing
   room.players.forEach(player => {
     if (player.id !== nextDrawer.id) {
       const socket = players.get(player.id);
       if (socket) {
+        console.log(`📤 Notifying ${player.name} that ${nextDrawer.name} is choosing word`);
         socket.emit('drawer-choosing', {
           currentRound: room.gameState.currentRound,
-          drawingPlayerName: nextDrawer.name, // FIXED: Use correct drawer name
+          drawingPlayerName: nextDrawer.name,
           timeLeft: 15
         });
       }

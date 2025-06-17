@@ -140,8 +140,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentRound: data.currentRound,
         drawingPlayerName: data.drawingPlayerName,
         timeLeft: data.timeLeft,
-        isChoosingWord: false,
-        wordChoices: []
+        isChoosingWord: true, // Set to true for waiting players
+        wordChoices: [] // Clear word choices for non-drawing players
       }));
     });
 
