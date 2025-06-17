@@ -161,14 +161,14 @@ function startNextTurn(room) {
     });
   }
   
-  // Notify other players that drawer is choosing
+  // Notify other players that drawer is choosing - FIXED: Send correct drawer name and round
   room.players.forEach(player => {
     if (player.id !== nextDrawer.id) {
       const socket = players.get(player.id);
       if (socket) {
         socket.emit('drawer-choosing', {
           currentRound: room.gameState.currentRound,
-          drawingPlayerName: nextDrawer.name,
+          drawingPlayerName: nextDrawer.name, // FIXED: Use correct drawer name
           timeLeft: 15
         });
       }

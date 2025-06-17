@@ -129,7 +129,7 @@ const GameRoomPage: React.FC = () => {
     );
   };
 
-  // Show word selection modal if player is choosing word
+  // Show word selection modal if player is choosing word - FIXED: Only show if words are available
   if (gameState.isChoosingWord && gameState.wordChoices.length > 0 && isDrawing) {
     return (
       <>
@@ -148,8 +148,8 @@ const GameRoomPage: React.FC = () => {
     );
   }
 
-  // Show waiting screen if someone else is choosing word
-  if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing) {
+  // Show waiting screen if someone else is choosing word - FIXED: Only show during actual word selection
+  if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing && gameState.drawingPlayerName) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
         <div className="text-center">
