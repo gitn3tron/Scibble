@@ -60,9 +60,11 @@ function createRoom(roomId, settings, hostPlayer) {
       messages: [],
       wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords],
       hintsRevealed: 0,
-      playersWhoHaveDrawn: [] // Track who has drawn in current round
+      playersWhoHaveDrawn: [], // Track who has drawn in current round
+      roundsCompleted: 0 // Track completed rounds
     },
-    timer: null
+    timer: null,
+    wordSelectionTimer: null
   };
   
   rooms.set(roomId, room);
@@ -111,7 +113,7 @@ function startRound(room) {
   console.log(`🎯 Starting round ${room.gameState.currentRound + 1} for room ${room.id}`);
   
   room.gameState.currentRound++;
-  room.gameState.timeLeft = room.settings.drawTime;
+  room.gameState.timeLeft = 15; // 15 seconds for word selection
   room.gameState.hintsRevealed = 0;
   
   // Select next drawer (rotate through players)
@@ -157,17 +159,27 @@ function startRound(room) {
   });
   
   // Start word selection timer
-  setTimeout(() => {
+  room.wordSelectionTimer = setTimeout(() => {
     if (rooms.has(room.id) && !room.gameState.currentWord) {
       // Auto-select first word if drawer didn't choose
+      console.log(`⏰ Auto-selecting word for room ${room.id}`);
       selectWord(room, room.gameState.wordChoices[0]);
     }
   }, 15000);
 }
 
 function selectWord(room, selectedWord) {
+  console.log(`📝 Word selected: ${selectedWord} for room ${room.id}`);
+  
+  // Clear word selection timer
+  if (room.wordSelectionTimer) {
+    clearTimeout(room.wordSelectionTimer);
+    room.wordSelectionTimer = null;
+  }
+  
   room.gameState.currentWord = selectedWord;
   room.gameState.wordChoices = [];
+  room.gameState.timeLeft = room.settings.drawTime; // Set actual drawing time
   
   const revealedWord = createRevealedWord(room.gameState.currentWord);
   
@@ -185,7 +197,7 @@ function selectWord(room, selectedWord) {
     }
   });
   
-  // Start timer
+  // Start drawing timer
   room.timer = setInterval(() => {
     room.gameState.timeLeft--;
     
@@ -219,6 +231,11 @@ function endRound(room) {
     room.timer = null;
   }
   
+  if (room.wordSelectionTimer) {
+    clearTimeout(room.wordSelectionTimer);
+    room.wordSelectionTimer = null;
+  }
+  
   // Reset drawing status
   room.players.forEach(player => {
     player.isDrawing = false;
@@ -243,15 +260,16 @@ function endRound(room) {
   // Check if all players have drawn in this round
   const allPlayersHaveDrawn = room.gameState.playersWhoHaveDrawn.length >= room.players.length;
   
-  // Check if game should end (all rounds completed OR all players have drawn)
-  if (room.gameState.currentRound >= room.settings.totalRounds || allPlayersHaveDrawn) {
-    // If all players have drawn but we haven't reached max rounds, reset for next round
-    if (allPlayersHaveDrawn && room.gameState.currentRound < room.settings.totalRounds) {
-      room.gameState.playersWhoHaveDrawn = [];
-    } else {
-      endGame(room);
-      return;
-    }
+  if (allPlayersHaveDrawn) {
+    room.gameState.roundsCompleted++;
+    room.gameState.playersWhoHaveDrawn = []; // Reset for next round
+    console.log(`✅ Round ${room.gameState.roundsCompleted} completed for room ${room.id}`);
+  }
+  
+  // Check if game should end
+  if (room.gameState.roundsCompleted >= room.settings.totalRounds) {
+    endGame(room);
+    return;
   }
   
   // Start next round after a delay
@@ -307,7 +325,7 @@ io.on('connection', (socket) => {
       
       console.log(`✅ Room ${roomId} created successfully with host: ${player.name}`);
       
-      // Send response to client - FIXED: Send both events
+      // Send response to client
       socket.emit('room-created', { roomId });
       
       // Immediately send player list to show host in room
@@ -441,10 +459,12 @@ io.on('connection', (socket) => {
       room.gameState.currentRound = 0;
       room.gameState.currentDrawerIndex = -1; // Reset drawer index
       room.gameState.playersWhoHaveDrawn = []; // Reset players who have drawn
+      room.gameState.roundsCompleted = 0; // Reset completed rounds
       
       // Initialize scores
       room.players.forEach(player => {
         room.gameState.scores[player.id] = 0;
+        player.score = 0;
       });
       
       console.log(`✅ Game started for room ${roomId} by host: ${room.players[0].name}`);
@@ -477,6 +497,7 @@ io.on('connection', (socket) => {
       const room = rooms.get(roomId);
       
       if (!room || !room.gameState.wordChoices.includes(selectedWord)) {
+        console.log('❌ Invalid word selection');
         return;
       }
       
@@ -607,6 +628,9 @@ io.on('connection', (socket) => {
         if (room.timer) {
           clearInterval(room.timer);
         }
+        if (room.wordSelectionTimer) {
+          clearTimeout(room.wordSelectionTimer);
+        }
         rooms.delete(roomId);
         console.log(`🧹 Room ${roomId} deleted (empty)`);
       } else {
@@ -650,6 +674,9 @@ io.on('connection', (socket) => {
             if (room.players.length === 0) {
               if (room.timer) {
                 clearInterval(room.timer);
+              }
+              if (room.wordSelectionTimer) {
+                clearTimeout(room.wordSelectionTimer);
               }
               rooms.delete(roomId);
               console.log(`🧹 Room ${roomId} deleted (empty after disconnect)`);

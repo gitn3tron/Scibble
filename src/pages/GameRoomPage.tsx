@@ -29,7 +29,7 @@ const GameRoomPage: React.FC = () => {
       joinRoom(roomId);
       setHasJoinedRoom(true);
     }
-  }, [connected, socket, roomId, player, gameState.roomId, hasJoinedRoom]);
+  }, [connected, socket, roomId, player, gameState.roomId, hasJoinedRoom, joinRoom, navigate]);
 
   // Separate cleanup effect that only runs on actual component unmount
   useEffect(() => {
@@ -149,7 +149,7 @@ const GameRoomPage: React.FC = () => {
   }
 
   // Show waiting screen if someone else is choosing word
-  if (gameState.currentRound > 0 && gameState.timeLeft <= 15 && !gameState.currentWord && !isDrawing) {
+  if (gameState.isPlaying && gameState.timeLeft <= 15 && !gameState.currentWord && !isDrawing) {
     const drawer = gameState.players.find(p => p.isDrawing);
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
@@ -309,7 +309,7 @@ const GameRoomPage: React.FC = () => {
               </span>
             </div>
             <div>
-              Round {gameState.currentRound}/{gameState.totalRounds}
+              Round {gameState.currentRound}
             </div>
           </div>
         </div>

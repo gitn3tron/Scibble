@@ -16,98 +16,60 @@ export const useSocket = () => useContext(SocketContext);
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const maxRetries = 5;
 
   useEffect(() => {
-    const connectSocket = () => {
-      const currentHostname = window.location.hostname;
-      const serverPort = '3001';
-      
-      // Use the same protocol as the current page to avoid mixed content issues
-      const serverUrl = import.meta.env.PROD
-        ? import.meta.env.VITE_SERVER_URL
-        : `${window.location.protocol}//${currentHostname}:${serverPort}`;
+    // Prevent multiple connections
+    if (socket) return;
 
-      if (socket) {
-        socket.close();
-      }
+    const currentHostname = window.location.hostname;
+    const serverPort = '3001';
+    
+    const serverUrl = import.meta.env.PROD
+      ? import.meta.env.VITE_SERVER_URL
+      : `${window.location.protocol}//${currentHostname}:${serverPort}`;
 
-      const socketInstance = io(serverUrl, {
-        reconnectionAttempts: maxRetries,
-        reconnectionDelay: 5000,      // 5 seconds
-        timeout: 60000,               // 1 minute
-        transports: ['polling', 'websocket'],
-        withCredentials: true,
-        forceNew: true,
-        autoConnect: true,
-        pingTimeout: 60000,           // 1 minute
-        pingInterval: 25000,          // 25 seconds
-        upgrade: true,
-        rememberUpgrade: true,
-        path: '/socket.io/',
-        rejectUnauthorized: false
-      });
+    console.log('🔌 Creating socket connection to:', serverUrl);
 
-      socketInstance.on('connect', () => {
-        console.log('Connected to server:', serverUrl);
-        setConnected(true);
-        setRetryCount(0);
-      });
+    const socketInstance = io(serverUrl, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      timeout: 30000,
+      transports: ['polling', 'websocket'],
+      withCredentials: true,
+      forceNew: true,
+      autoConnect: true,
+      pingTimeout: 60000,
+      pingInterval: 25000,
+      upgrade: true,
+      rememberUpgrade: true,
+      path: '/socket.io/'
+    });
 
-      socketInstance.on('disconnect', (reason) => {
-        console.log('Disconnected from server. Reason:', reason);
-        setConnected(false);
+    socketInstance.on('connect', () => {
+      console.log('✅ Connected to server with ID:', socketInstance.id);
+      setConnected(true);
+    });
 
-        if (reason === 'io server disconnect' || reason === 'transport close') {
-          // Server initiated disconnect or transport closed, try reconnecting
-          setTimeout(() => {
-            if (retryCount < maxRetries) {
-              console.log('Attempting to reconnect...');
-              socketInstance.connect();
-            }
-          }, 5000);
-        }
-      });
+    socketInstance.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from server. Reason:', reason);
+      setConnected(false);
+    });
 
-      socketInstance.on('connect_error', (error) => {
-        console.error('Connection error:', error.message);
-        setConnected(false);
-        setRetryCount(prev => prev + 1);
+    socketInstance.on('connect_error', (error) => {
+      console.error('❌ Connection error:', error.message);
+      setConnected(false);
+    });
 
-        if (retryCount < maxRetries) {
-          console.log(`Attempting reconnection (${retryCount + 1}/${maxRetries})...`);
-          
-          // Switch to polling if websocket fails
-          if (retryCount > 1) {
-            socketInstance.io.opts.transports = ['polling'];
-          }
-          
-          setTimeout(() => {
-            socketInstance.connect();
-          }, 5000);
-        } else {
-          console.error('Max retry attempts reached. Please refresh the page or check server status.');
-        }
-      });
+    setSocket(socketInstance);
 
-      setSocket(socketInstance);
-
-      return () => {
-        socketInstance.disconnect();
-      };
-    };
-
-    if (!socket && retryCount < maxRetries) {
-      connectSocket();
-    }
-
+    // Cleanup function
     return () => {
-      if (socket) {
-        socket.disconnect();
-      }
+      console.log('🧹 Cleaning up socket connection');
+      socketInstance.disconnect();
+      setSocket(null);
+      setConnected(false);
     };
-  }, [socket, retryCount]);
+  }, []); // Empty dependency array to prevent re-creation
 
   return (
     <SocketContext.Provider value={{ socket, connected }}>
