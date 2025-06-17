@@ -29,12 +29,12 @@ const RoomCreationPage: React.FC = () => {
     }
   }, [player, navigate]);
 
-  // Navigate to room when created - FIXED: Only navigate, don't call joinRoom
+  // Navigate to room when created - FIXED: Direct navigation without additional join
   useEffect(() => {
     if (gameState.roomId && isCreating) {
-      console.log('Room created, navigating to room:', gameState.roomId);
+      console.log('Room created successfully, navigating to room:', gameState.roomId);
       setIsCreating(false);
-      // Navigate directly without calling joinRoom since host is already in room
+      // Navigate directly - host is already in the room from creation
       navigate(`/room/${gameState.roomId}`);
     }
   }, [gameState.roomId, navigate, isCreating]);
@@ -98,6 +98,7 @@ const RoomCreationPage: React.FC = () => {
   const handleCreateRoom = async () => {
     if (!validateSettings() || !connected) return;
     
+    console.log('Creating room with settings:', settings);
     setIsCreating(true);
     
     const customWordsList = settings.customWords

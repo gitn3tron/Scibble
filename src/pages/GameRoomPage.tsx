@@ -15,6 +15,7 @@ const GameRoomPage: React.FC = () => {
   const { socket, connected } = useSocket();
   const { player, gameState, joinRoom, startGame, leaveRoom, selectWord } = useGame();
   const [showGameOver, setShowGameOver] = useState(false);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
 
   useEffect(() => {
     if (!player) {
@@ -22,19 +23,24 @@ const GameRoomPage: React.FC = () => {
       return;
     }
 
-    // Only call joinRoom if we're not already in the room and socket is connected
-    if (connected && socket && roomId && gameState.roomId !== roomId) {
+    // Only join room if we're not already in it and haven't joined yet
+    if (connected && socket && roomId && gameState.roomId !== roomId && !hasJoinedRoom) {
       console.log('Joining room:', roomId);
       joinRoom(roomId);
+      setHasJoinedRoom(true);
     }
+  }, [connected, socket, roomId, player, gameState.roomId, hasJoinedRoom]);
 
+  // Separate cleanup effect that only runs on actual component unmount
+  useEffect(() => {
     return () => {
-      // Only leave room if we're actually in a room
-      if (gameState.roomId) {
+      // Only leave room if we're actually leaving the page (not just re-rendering)
+      if (gameState.roomId && window.location.pathname !== `/room/${gameState.roomId}`) {
+        console.log('Component unmounting, leaving room');
         leaveRoom();
       }
     };
-  }, [connected, socket, roomId, player]);
+  }, []); // Empty dependency array - only runs on mount/unmount
 
   useEffect(() => {
     if (!gameState.isPlaying && gameState.currentRound > 0) {
