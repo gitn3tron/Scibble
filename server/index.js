@@ -52,13 +52,15 @@ function createRoom(roomId, settings, hostPlayer) {
       isPlaying: false,
       currentRound: 0,
       currentDrawer: null,
+      currentDrawerIndex: -1, // Track drawer index for proper rotation
       currentWord: '',
       wordChoices: [],
       timeLeft: 0,
       scores: {},
       messages: [],
       wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords],
-      hintsRevealed: 0
+      hintsRevealed: 0,
+      playersWhoHaveDrawn: [] // Track who has drawn in current round
     },
     timer: null
   };
@@ -87,7 +89,7 @@ function createRevealedWord(word, hintsRevealed = 0) {
     }
   }
   
-  // Calculate how many letters to reveal based on hints - FIXED
+  // Calculate how many letters to reveal based on hints
   const lettersToReveal = Math.min(hintsRevealed, Math.floor(letterIndices.length * 0.6));
   
   // Randomly select which letters to reveal
@@ -113,11 +115,15 @@ function startRound(room) {
   room.gameState.hintsRevealed = 0;
   
   // Select next drawer (rotate through players)
-  const currentDrawerIndex = room.players.findIndex(p => p.id === room.gameState.currentDrawer);
-  const nextDrawerIndex = (currentDrawerIndex + 1) % room.players.length;
-  const nextDrawer = room.players[nextDrawerIndex];
+  room.gameState.currentDrawerIndex = (room.gameState.currentDrawerIndex + 1) % room.players.length;
+  const nextDrawer = room.players[room.gameState.currentDrawerIndex];
   
   room.gameState.currentDrawer = nextDrawer.id;
+  
+  // Add to players who have drawn
+  if (!room.gameState.playersWhoHaveDrawn.includes(nextDrawer.id)) {
+    room.gameState.playersWhoHaveDrawn.push(nextDrawer.id);
+  }
   
   // Generate word choices for the drawer
   room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
@@ -186,7 +192,7 @@ function selectWord(room, selectedWord) {
     // Broadcast time update
     io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
     
-    // Check for hints based on settings - FIXED
+    // Check for hints based on settings
     if (room.settings.hintsCount > 0) {
       const hintInterval = Math.floor(room.settings.drawTime / (room.settings.hintsCount + 1));
       const hintsToGive = Math.floor((room.settings.drawTime - room.gameState.timeLeft) / hintInterval);
@@ -234,17 +240,26 @@ function endRound(room) {
   room.gameState.wordChoices = [];
   room.gameState.hintsRevealed = 0;
   
-  // Check if game should end
-  if (room.gameState.currentRound >= room.settings.totalRounds) {
-    endGame(room);
-  } else {
-    // Start next round after a delay
-    setTimeout(() => {
-      if (rooms.has(room.id)) {
-        startRound(room);
-      }
-    }, 5000);
+  // Check if all players have drawn in this round
+  const allPlayersHaveDrawn = room.gameState.playersWhoHaveDrawn.length >= room.players.length;
+  
+  // Check if game should end (all rounds completed OR all players have drawn)
+  if (room.gameState.currentRound >= room.settings.totalRounds || allPlayersHaveDrawn) {
+    // If all players have drawn but we haven't reached max rounds, reset for next round
+    if (allPlayersHaveDrawn && room.gameState.currentRound < room.settings.totalRounds) {
+      room.gameState.playersWhoHaveDrawn = [];
+    } else {
+      endGame(room);
+      return;
+    }
   }
+  
+  // Start next round after a delay
+  setTimeout(() => {
+    if (rooms.has(room.id)) {
+      startRound(room);
+    }
+  }, 5000);
 }
 
 function endGame(room) {
@@ -329,18 +344,6 @@ io.on('connection', (socket) => {
         return;
       }
       
-      if (room.players.length >= room.settings.totalPlayers) {
-        console.log(`❌ Room ${roomId} is full`);
-        socket.emit('error', { message: 'Room is full' });
-        return;
-      }
-      
-      if (room.gameState.isPlaying) {
-        console.log(`❌ Game in room ${roomId} already in progress`);
-        socket.emit('error', { message: 'Game already in progress' });
-        return;
-      }
-      
       // Check if player is already in room (reconnection)
       const existingPlayerIndex = room.players.findIndex(p => p.id === player.id);
       if (existingPlayerIndex !== -1) {
@@ -358,6 +361,19 @@ io.on('connection', (socket) => {
           socket.emit('new-message', message);
         });
         
+        return;
+      }
+      
+      // Check room capacity AFTER checking for existing player
+      if (room.players.length >= room.settings.totalPlayers) {
+        console.log(`❌ Room ${roomId} is full`);
+        socket.emit('error', { message: 'Room is full' });
+        return;
+      }
+      
+      if (room.gameState.isPlaying) {
+        console.log(`❌ Game in room ${roomId} already in progress`);
+        socket.emit('error', { message: 'Game already in progress' });
         return;
       }
       
@@ -423,6 +439,8 @@ io.on('connection', (socket) => {
       
       room.gameState.isPlaying = true;
       room.gameState.currentRound = 0;
+      room.gameState.currentDrawerIndex = -1; // Reset drawer index
+      room.gameState.playersWhoHaveDrawn = []; // Reset players who have drawn
       
       // Initialize scores
       room.players.forEach(player => {

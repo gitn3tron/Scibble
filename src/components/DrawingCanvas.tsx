@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { Paintbrush, Eraser, RefreshCw, Palette, Undo2, Redo2 } from 'lucide-react';
+import { Paintbrush, Eraser, RefreshCw, Palette, Undo2, Redo2, PaintBucket } from 'lucide-react';
 
 interface DrawingCanvasProps {
   isDrawing: boolean;
@@ -25,7 +25,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
   const [lastPoint, setLastPoint] = useState<Point | null>(null);
   const [color, setColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(5);
-  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+  const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [undoStack, setUndoStack] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
@@ -75,7 +75,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Clear canvas when new round starts - FIXED
+  // Clear canvas when new round starts
   useEffect(() => {
     if (!ctx || !canvasRef.current) return;
     
@@ -118,15 +118,19 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       to: Point;
       color: string;
       brushSize: number;
-      tool: 'brush' | 'eraser';
+      tool: 'brush' | 'eraser' | 'fill';
     }) => {
-      ctx.lineWidth = data.brushSize;
-      ctx.strokeStyle = data.tool === 'eraser' ? '#ffffff' : data.color;
-      
-      ctx.beginPath();
-      ctx.moveTo(data.from.x, data.from.y);
-      ctx.lineTo(data.to.x, data.to.y);
-      ctx.stroke();
+      if (data.tool === 'fill') {
+        floodFill(data.from.x, data.from.y, data.color, false);
+      } else {
+        ctx.lineWidth = data.brushSize;
+        ctx.strokeStyle = data.tool === 'eraser' ? '#ffffff' : data.color;
+        
+        ctx.beginPath();
+        ctx.moveTo(data.from.x, data.from.y);
+        ctx.lineTo(data.to.x, data.to.y);
+        ctx.stroke();
+      }
     });
 
     return () => {
@@ -146,17 +150,89 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     setRedoStack([]); // Clear redo stack when new action is performed
   };
 
+  // Flood fill algorithm for paint bucket
+  const floodFill = (startX: number, startY: number, fillColor: string, broadcast: boolean = true) => {
+    if (!ctx || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Convert hex color to RGB
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : null;
+    };
+    
+    const fillRgb = hexToRgb(fillColor);
+    if (!fillRgb) return;
+    
+    const startIndex = (Math.floor(startY) * canvas.width + Math.floor(startX)) * 4;
+    const startR = data[startIndex];
+    const startG = data[startIndex + 1];
+    const startB = data[startIndex + 2];
+    
+    // Don't fill if clicking on the same color
+    if (startR === fillRgb.r && startG === fillRgb.g && startB === fillRgb.b) return;
+    
+    const stack = [[Math.floor(startX), Math.floor(startY)]];
+    
+    while (stack.length > 0) {
+      const [x, y] = stack.pop()!;
+      
+      if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+      
+      const index = (y * canvas.width + x) * 4;
+      
+      if (data[index] !== startR || data[index + 1] !== startG || data[index + 2] !== startB) continue;
+      
+      data[index] = fillRgb.r;
+      data[index + 1] = fillRgb.g;
+      data[index + 2] = fillRgb.b;
+      data[index + 3] = 255;
+      
+      stack.push([x + 1, y]);
+      stack.push([x - 1, y]);
+      stack.push([x, y + 1]);
+      stack.push([x, y - 1]);
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    if (broadcast && socket && roomId && isDrawing) {
+      socket.emit('draw', {
+        roomId,
+        from: { x: startX, y: startY },
+        to: { x: startX, y: startY },
+        color: fillColor,
+        brushSize: 0,
+        tool: 'fill'
+      });
+    }
+  };
+
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !ctx) return;
     
     const point = getPointerPosition(e);
+    
+    if (tool === 'fill') {
+      saveState();
+      floodFill(point.x, point.y, color);
+      return;
+    }
+    
     setDrawing(true);
     setLastPoint(point);
     saveState(); // Save state before starting to draw
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!drawing || !isDrawing || !ctx || !lastPoint) return;
+    if (!drawing || !isDrawing || !ctx || !lastPoint || tool === 'fill') return;
     
     e.preventDefault();
     const currentPoint = getPointerPosition(e);
@@ -213,14 +289,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
   const clearCanvas = (broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
     
+    saveState();
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     
     if (broadcast && socket && roomId && isDrawing) {
       socket.emit('clear', { roomId });
     }
-    
-    saveState();
   };
 
   const undo = () => {
@@ -256,7 +331,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       <div className="relative flex-grow border border-gray-300 bg-white rounded-lg overflow-hidden">
         <canvas
           ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full cursor-crosshair"
+          className={`absolute top-0 left-0 w-full h-full ${
+            tool === 'fill' ? 'cursor-crosshair' : 'cursor-crosshair'
+          }`}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={endDrawing}
@@ -278,7 +355,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       </div>
       
       {isDrawing && (
-        <div className="flex items-center justify-center space-x-3 pt-3 pb-2 bg-gray-50 rounded-b-lg">
+        <div className="flex items-center justify-center space-x-3 pt-3 pb-2 bg-gray-50 rounded-b-lg flex-wrap">
           {/* Tool Selection */}
           <button
             onClick={() => setTool('brush')}
@@ -300,7 +377,17 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
             <Eraser size={18} />
           </button>
           
-          {/* Color Picker - FIXED */}
+          <button
+            onClick={() => setTool('fill')}
+            className={`p-2 rounded-full transition-colors ${
+              tool === 'fill' ? 'bg-purple-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
+            }`}
+            title="Fill"
+          >
+            <PaintBucket size={18} />
+          </button>
+          
+          {/* Color Picker */}
           <div className="relative">
             <button 
               onClick={() => setShowColorPicker(!showColorPicker)}
@@ -333,21 +420,23 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
           </div>
           
           {/* Brush Size */}
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Size:</span>
-            <input
-              type="range"
-              min="1"
-              max="20"
-              value={brushSize}
-              onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              className="w-20"
-              title={`Brush size: ${brushSize}px`}
-            />
-            <span className="text-sm text-gray-600 w-6">{brushSize}</span>
-          </div>
+          {tool !== 'fill' && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">Size:</span>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={brushSize}
+                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                className="w-20"
+                title={`Brush size: ${brushSize}px`}
+              />
+              <span className="text-sm text-gray-600 w-6">{brushSize}</span>
+            </div>
+          )}
           
-          {/* Undo/Redo - FIXED */}
+          {/* Undo/Redo */}
           <button
             onClick={undo}
             disabled={undoStack.length <= 1}
