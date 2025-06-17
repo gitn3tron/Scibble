@@ -175,14 +175,25 @@ function startNextTurn(room) {
     }
   });
   
-  // Start word selection timer
-  room.wordSelectionTimer = setTimeout(() => {
-    if (rooms.has(room.id) && room.gameState.isChoosingWord) {
-      // Auto-select first word if drawer didn't choose
-      console.log(`⏰ Auto-selecting word for room ${room.id}`);
-      selectWord(room, room.gameState.wordChoices[0]);
+  // Start word selection timer with countdown
+  const wordSelectionCountdown = setInterval(() => {
+    room.gameState.timeLeft--;
+    
+    // Broadcast time update during word selection
+    io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
+    
+    if (room.gameState.timeLeft <= 0) {
+      clearInterval(wordSelectionCountdown);
+      if (rooms.has(room.id) && room.gameState.isChoosingWord) {
+        // Auto-select first word if drawer didn't choose
+        console.log(`⏰ Auto-selecting word for room ${room.id}`);
+        selectWord(room, room.gameState.wordChoices[0]);
+      }
     }
-  }, 15000);
+  }, 1000);
+  
+  // Store the countdown interval
+  room.wordSelectionTimer = wordSelectionCountdown;
 }
 
 function selectWord(room, selectedWord) {
@@ -190,7 +201,7 @@ function selectWord(room, selectedWord) {
   
   // Clear word selection timer
   if (room.wordSelectionTimer) {
-    clearTimeout(room.wordSelectionTimer);
+    clearInterval(room.wordSelectionTimer);
     room.wordSelectionTimer = null;
   }
   
@@ -253,7 +264,7 @@ function endTurn(room) {
   }
   
   if (room.wordSelectionTimer) {
-    clearTimeout(room.wordSelectionTimer);
+    clearInterval(room.wordSelectionTimer);
     room.wordSelectionTimer = null;
   }
   
@@ -628,6 +639,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('undo', (data) => {
+    try {
+      const { roomId } = data;
+      
+      // Broadcast undo to all other players in the room
+      socket.to(roomId).emit('undo-canvas');
+      
+    } catch (error) {
+      console.error('❌ Error handling undo event:', error);
+    }
+  });
+
+  socket.on('redo', (data) => {
+    try {
+      const { roomId } = data;
+      
+      // Broadcast redo to all other players in the room
+      socket.to(roomId).emit('redo-canvas');
+      
+    } catch (error) {
+      console.error('❌ Error handling redo event:', error);
+    }
+  });
+
   socket.on('leave-room', (data) => {
     console.log('🚪 Received leave-room event:', data);
     
@@ -652,7 +687,7 @@ io.on('connection', (socket) => {
           clearInterval(room.timer);
         }
         if (room.wordSelectionTimer) {
-          clearTimeout(room.wordSelectionTimer);
+          clearInterval(room.wordSelectionTimer);
         }
         rooms.delete(roomId);
         console.log(`🧹 Room ${roomId} deleted (empty)`);
@@ -699,7 +734,7 @@ io.on('connection', (socket) => {
                 clearInterval(room.timer);
               }
               if (room.wordSelectionTimer) {
-                clearTimeout(room.wordSelectionTimer);
+                clearInterval(room.wordSelectionTimer);
               }
               rooms.delete(roomId);
               console.log(`🧹 Room ${roomId} deleted (empty after disconnect)`);

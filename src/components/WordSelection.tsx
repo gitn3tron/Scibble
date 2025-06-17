@@ -18,9 +18,14 @@ const WordSelection: React.FC<WordSelectionProps> = ({ words, timeLeft, onWordSe
   }, [timeLeft, selectedWord, words]);
 
   const handleWordSelect = (word: string) => {
+    if (selectedWord) return; // Prevent multiple selections
     setSelectedWord(word);
     onWordSelect(word);
   };
+
+  if (words.length === 0) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -38,7 +43,13 @@ const WordSelection: React.FC<WordSelectionProps> = ({ words, timeLeft, onWordSe
             <button
               key={word}
               onClick={() => handleWordSelect(word)}
-              className="w-full p-4 text-lg font-medium bg-gray-100 hover:bg-purple-100 hover:text-purple-700 rounded-lg transition-colors border-2 border-transparent hover:border-purple-300"
+              className={`w-full p-4 text-lg font-medium rounded-lg transition-colors border-2 ${
+                selectedWord === word
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : selectedWord
+                    ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    : 'bg-gray-100 hover:bg-purple-100 hover:text-purple-700 border-transparent hover:border-purple-300'
+              }`}
               disabled={!!selectedWord}
             >
               {word}
@@ -47,7 +58,9 @@ const WordSelection: React.FC<WordSelectionProps> = ({ words, timeLeft, onWordSe
         </div>
         
         <div className="mt-6 text-center text-sm text-gray-500">
-          {timeLeft > 0 ? (
+          {selectedWord ? (
+            `Word selected: ${selectedWord}`
+          ) : timeLeft > 0 ? (
             "Choose quickly! Time is running out."
           ) : (
             "Time's up! Auto-selecting first word..."
