@@ -68,11 +68,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     setRedoStack([]);
   }, []);
 
-  // Clear canvas when new round starts
+  // Clear canvas when new turn starts
   useEffect(() => {
     if (!ctx || !canvasRef.current) return;
     
-    const clearCanvasForNewRound = () => {
+    const clearCanvasForNewTurn = () => {
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
       
@@ -89,11 +89,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     if (socket) {
-      socket.on('round-started', clearCanvasForNewRound);
-      socket.on('clear-canvas', clearCanvasForNewRound);
+      socket.on('turn-started', clearCanvasForNewTurn);
+      socket.on('clear-canvas', clearCanvasForNewTurn);
       return () => {
-        socket.off('round-started', clearCanvasForNewRound);
-        socket.off('clear-canvas', clearCanvasForNewRound);
+        socket.off('turn-started', clearCanvasForNewTurn);
+        socket.off('clear-canvas', clearCanvasForNewTurn);
       };
     }
   }, [socket, ctx]);
@@ -228,6 +228,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     
     if ('touches' in e) {
       // Touch event
+      if (e.touches.length === 0) return { x: 0, y: 0 };
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
     } else {

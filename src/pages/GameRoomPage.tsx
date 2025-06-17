@@ -135,8 +135,8 @@ const GameRoomPage: React.FC = () => {
       <>
         <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Get ready to draw!</h2>
-            <p className="text-purple-200">Choose your word...</p>
+            <h2 className="text-2xl font-bold mb-4">Round {gameState.currentRound}</h2>
+            <p className="text-purple-200">Choose your word to draw...</p>
           </div>
         </div>
         <WordSelection
@@ -149,15 +149,14 @@ const GameRoomPage: React.FC = () => {
   }
 
   // Show waiting screen if someone else is choosing word
-  if (gameState.isPlaying && gameState.timeLeft <= 15 && !gameState.currentWord && !isDrawing) {
-    const drawer = gameState.players.find(p => p.isDrawing);
+  if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
           <h2 className="text-2xl font-bold mb-2">Round {gameState.currentRound}</h2>
           <p className="text-purple-200">
-            {drawer?.name} is choosing a word to draw...
+            {gameState.drawingPlayerName} is choosing a word to draw...
           </p>
           <div className="mt-4 flex items-center justify-center text-orange-300">
             <Clock size={20} className="mr-2" />
@@ -309,7 +308,7 @@ const GameRoomPage: React.FC = () => {
               </span>
             </div>
             <div>
-              Round {gameState.currentRound}
+              Round {gameState.currentRound} • Turn {gameState.turnNumber}/{gameState.totalTurns}
             </div>
           </div>
         </div>
@@ -326,7 +325,9 @@ const GameRoomPage: React.FC = () => {
               </div>
             ) : (
               <div>
-                <span className="font-bold text-lg text-white">Guess the word:</span>{' '}
+                <span className="font-bold text-lg text-white">
+                  {gameState.drawingPlayerName} is drawing:
+                </span>{' '}
                 <span className="text-xl font-mono tracking-wider text-yellow-300">
                   {gameState.revealedWord}
                 </span>

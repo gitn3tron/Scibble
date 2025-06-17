@@ -26,6 +26,9 @@ interface GameState {
   messages: Message[];
   wordChoices: string[];
   isChoosingWord: boolean;
+  drawingPlayerName: string;
+  turnNumber: number;
+  totalTurns: number;
 }
 
 interface Message {
@@ -72,6 +75,9 @@ const initialGameState: GameState = {
   messages: [],
   wordChoices: [],
   isChoosingWord: false,
+  drawingPlayerName: '',
+  turnNumber: 0,
+  totalTurns: 0,
 };
 
 const GameContext = createContext<GameContextType>({
@@ -132,25 +138,32 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
+        drawingPlayerName: data.drawingPlayerName,
         timeLeft: data.timeLeft,
         isChoosingWord: false,
         wordChoices: []
       }));
     });
 
-    socket.on('round-started', (data: {
+    socket.on('turn-started', (data: {
       currentRound: number,
       timeLeft: number,
       drawingPlayerId: string,
+      drawingPlayerName: string,
       currentWord?: string,
-      revealedWord: string
+      revealedWord: string,
+      turnNumber: number,
+      totalTurns: number
     }) => {
-      console.log('🎯 Received round-started event:', data);
+      console.log('🎯 Received turn-started event:', data);
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
         timeLeft: data.timeLeft,
         revealedWord: data.revealedWord,
+        drawingPlayerName: data.drawingPlayerName,
+        turnNumber: data.turnNumber,
+        totalTurns: data.totalTurns,
         isChoosingWord: false,
         wordChoices: [],
         players: prev.players.map(p => ({
@@ -188,8 +201,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
     });
 
-    socket.on('round-ended', (data: { scores: Record<string, number>, correctWord: string }) => {
-      console.log('🏁 Received round-ended event:', data);
+    socket.on('turn-ended', (data: { scores: Record<string, number>, correctWord: string }) => {
+      console.log('🏁 Received turn-ended event:', data);
       setGameState(prev => ({
         ...prev,
         players: prev.players.map(p => ({
@@ -232,12 +245,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('game-started');
       socket.off('word-choices');
       socket.off('drawer-choosing');
-      socket.off('round-started');
+      socket.off('turn-started');
       socket.off('time-update');
       socket.off('hint-revealed');
       socket.off('new-message');
       socket.off('player-guessed');
-      socket.off('round-ended');
+      socket.off('turn-ended');
       socket.off('game-ended');
       socket.off('error');
       socket.off('connect_error');
