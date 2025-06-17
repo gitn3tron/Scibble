@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { Paintbrush, Eraser, RefreshCw, Palette, Undo2, Redo2, PaintBucket } from 'lucide-react';
 
@@ -38,9 +38,16 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    // Set canvas size
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    // Set canvas size with device pixel ratio for better quality
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    
+    context.scale(dpr, dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
 
     // Set default styles
     context.lineJoin = 'round';
@@ -48,7 +55,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     context.lineWidth = brushSize;
     context.strokeStyle = color;
     context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillRect(0, 0, rect.width, rect.height);
 
     setCtx(context);
 
@@ -58,34 +65,23 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       timestamp: Date.now()
     };
     setUndoStack([initialState]);
-
-    // Handle window resize
-    const handleResize = () => {
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      context.putImageData(imageData, 0, 0);
-      context.lineJoin = 'round';
-      context.lineCap = 'round';
-      context.lineWidth = brushSize;
-      context.strokeStyle = color;
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    setRedoStack([]);
   }, []);
 
-  // Clear canvas when new round starts
+  // Clear canvas when new turn starts
   useEffect(() => {
     if (!ctx || !canvasRef.current) return;
     
-    const clearCanvasForNewRound = () => {
+    const clearCanvasForNewTurn = () => {
+      const canvas = canvasRef.current!;
+      const rect = canvas.getBoundingClientRect();
+      
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
+      ctx.fillRect(0, 0, rect.width, rect.height);
       
       // Reset undo/redo stacks
       const initialState: DrawingState = {
-        imageData: ctx.getImageData(0, 0, canvasRef.current!.width, canvasRef.current!.height),
+        imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
         timestamp: Date.now()
       };
       setUndoStack([initialState]);
@@ -93,11 +89,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     if (socket) {
-      socket.on('round-started', clearCanvasForNewRound);
-      socket.on('clear-canvas', clearCanvasForNewRound);
+      socket.on('turn-started', clearCanvasForNewTurn);
+      socket.on('clear-canvas', clearCanvasForNewTurn);
       return () => {
-        socket.off('round-started', clearCanvasForNewRound);
-        socket.off('clear-canvas', clearCanvasForNewRound);
+        socket.off('turn-started', clearCanvasForNewTurn);
+        socket.off('clear-canvas', clearCanvasForNewTurn);
       };
     }
   }, [socket, ctx]);
@@ -113,7 +109,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
   useEffect(() => {
     if (!socket || !ctx) return;
 
-    socket.on('drawing-data', (data: {
+    const handleDrawingData = (data: {
       from: Point;
       to: Point;
       color: string;
@@ -131,14 +127,62 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
         ctx.lineTo(data.to.x, data.to.y);
         ctx.stroke();
       }
-    });
+    };
+
+    const handleClearCanvas = () => {
+      if (!canvasRef.current) return;
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      
+      // Reset undo/redo stacks
+      const initialState: DrawingState = {
+        imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+        timestamp: Date.now()
+      };
+      setUndoStack([initialState]);
+      setRedoStack([]);
+    };
+
+    const handleUndoCanvas = () => {
+      if (undoStack.length <= 1) return;
+      
+      const currentState = undoStack[undoStack.length - 1];
+      const previousState = undoStack[undoStack.length - 2];
+      
+      setRedoStack(prev => [...prev, currentState]);
+      setUndoStack(prev => prev.slice(0, -1));
+      
+      ctx.putImageData(previousState.imageData, 0, 0);
+    };
+
+    const handleRedoCanvas = () => {
+      if (redoStack.length === 0) return;
+      
+      const stateToRestore = redoStack[redoStack.length - 1];
+      
+      setUndoStack(prev => [...prev, stateToRestore]);
+      setRedoStack(prev => prev.slice(0, -1));
+      
+      ctx.putImageData(stateToRestore.imageData, 0, 0);
+    };
+
+    socket.on('drawing-data', handleDrawingData);
+    socket.on('clear-canvas', handleClearCanvas);
+    socket.on('undo-canvas', handleUndoCanvas);
+    socket.on('redo-canvas', handleRedoCanvas);
 
     return () => {
-      socket.off('drawing-data');
+      socket.off('drawing-data', handleDrawingData);
+      socket.off('clear-canvas', handleClearCanvas);
+      socket.off('undo-canvas', handleUndoCanvas);
+      socket.off('redo-canvas', handleRedoCanvas);
     };
-  }, [socket, ctx]);
+  }, [socket, ctx, undoStack, redoStack]);
 
-  const saveState = () => {
+  const saveState = useCallback(() => {
     if (!ctx || !canvasRef.current) return;
     
     const newState: DrawingState = {
@@ -146,15 +190,19 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       timestamp: Date.now()
     };
     
-    setUndoStack(prev => [...prev.slice(-19), newState]); // Keep last 20 states
+    setUndoStack(prev => {
+      const newStack = [...prev, newState];
+      return newStack.slice(-20); // Keep last 20 states
+    });
     setRedoStack([]); // Clear redo stack when new action is performed
-  };
+  }, [ctx]);
 
   // Flood fill algorithm for paint bucket
-  const floodFill = (startX: number, startY: number, fillColor: string, broadcast: boolean = true) => {
+  const floodFill = useCallback((startX: number, startY: number, fillColor: string, broadcast: boolean = true) => {
     if (!ctx || !canvasRef.current) return;
     
     const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     
@@ -171,7 +219,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     const fillRgb = hexToRgb(fillColor);
     if (!fillRgb) return;
     
-    const startIndex = (Math.floor(startY) * canvas.width + Math.floor(startX)) * 4;
+    const dpr = window.devicePixelRatio || 1;
+    const x = Math.floor(startX * dpr);
+    const y = Math.floor(startY * dpr);
+    
+    const startIndex = (y * canvas.width + x) * 4;
     const startR = data[startIndex];
     const startG = data[startIndex + 1];
     const startB = data[startIndex + 2];
@@ -179,14 +231,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     // Don't fill if clicking on the same color
     if (startR === fillRgb.r && startG === fillRgb.g && startB === fillRgb.b) return;
     
-    const stack = [[Math.floor(startX), Math.floor(startY)]];
+    const stack = [[x, y]];
     
     while (stack.length > 0) {
-      const [x, y] = stack.pop()!;
+      const [currentX, currentY] = stack.pop()!;
       
-      if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+      if (currentX < 0 || currentX >= canvas.width || currentY < 0 || currentY >= canvas.height) continue;
       
-      const index = (y * canvas.width + x) * 4;
+      const index = (currentY * canvas.width + currentX) * 4;
       
       if (data[index] !== startR || data[index + 1] !== startG || data[index + 2] !== startB) continue;
       
@@ -195,10 +247,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       data[index + 2] = fillRgb.b;
       data[index + 3] = 255;
       
-      stack.push([x + 1, y]);
-      stack.push([x - 1, y]);
-      stack.push([x, y + 1]);
-      stack.push([x, y - 1]);
+      stack.push([currentX + 1, currentY]);
+      stack.push([currentX - 1, currentY]);
+      stack.push([currentX, currentY + 1]);
+      stack.push([currentX, currentY - 1]);
     }
     
     ctx.putImageData(imageData, 0, 0);
@@ -213,11 +265,36 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
         tool: 'fill'
       });
     }
-  };
+  }, [ctx, socket, roomId, isDrawing]);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const getPointerPosition = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if ('touches' in e) {
+      // Touch event
+      if (e.touches.length === 0) return { x: 0, y: 0 };
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      // Mouse event
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  }, []);
+
+  const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !ctx) return;
     
+    e.preventDefault();
     const point = getPointerPosition(e);
     
     if (tool === 'fill') {
@@ -229,9 +306,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     setDrawing(true);
     setLastPoint(point);
     saveState(); // Save state before starting to draw
-  };
+  }, [isDrawing, ctx, tool, getPointerPosition, saveState, floodFill, color]);
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!drawing || !isDrawing || !ctx || !lastPoint || tool === 'fill') return;
     
     e.preventDefault();
@@ -256,49 +333,29 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     }
     
     setLastPoint(currentPoint);
-  };
+  }, [drawing, isDrawing, ctx, lastPoint, tool, getPointerPosition, socket, roomId, color, brushSize]);
 
-  const endDrawing = () => {
+  const endDrawing = useCallback(() => {
     setDrawing(false);
     setLastPoint(null);
-  };
+  }, []);
 
-  const getPointerPosition = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): Point => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    
-    const rect = canvas.getBoundingClientRect();
-    let clientX, clientY;
-    
-    if ('touches' in e) {
-      // Touch event
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      // Mouse event
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
-    };
-  };
-
-  const clearCanvas = (broadcast = true) => {
+  const clearCanvas = useCallback((broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
     
     saveState();
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    ctx.fillRect(0, 0, rect.width, rect.height);
     
     if (broadcast && socket && roomId && isDrawing) {
       socket.emit('clear', { roomId });
     }
-  };
+  }, [ctx, saveState, socket, roomId, isDrawing]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
     
     const currentState = undoStack[undoStack.length - 1];
@@ -308,9 +365,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     setUndoStack(prev => prev.slice(0, -1));
     
     ctx.putImageData(previousState.imageData, 0, 0);
-  };
+    
+    // Broadcast undo to other players
+    if (socket && roomId && isDrawing) {
+      socket.emit('undo', { roomId });
+    }
+  }, [ctx, undoStack, socket, roomId, isDrawing]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (!ctx || !canvasRef.current || redoStack.length === 0) return;
     
     const stateToRestore = redoStack[redoStack.length - 1];
@@ -319,7 +381,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     setRedoStack(prev => prev.slice(0, -1));
     
     ctx.putImageData(stateToRestore.imageData, 0, 0);
-  };
+    
+    // Broadcast redo to other players
+    if (socket && roomId && isDrawing) {
+      socket.emit('redo', { roomId });
+    }
+  }, [ctx, redoStack, socket, roomId, isDrawing]);
 
   const colorOptions = [
     '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', 
@@ -341,6 +408,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={endDrawing}
+          style={{ touchAction: 'none' }}
         />
         
         {!isDrawing && (

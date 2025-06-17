@@ -60,9 +60,12 @@ function createRoom(roomId, settings, hostPlayer) {
       messages: [],
       wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords],
       hintsRevealed: 0,
-      playersWhoHaveDrawn: [] // Track who has drawn in current round
+      playersWhoHaveDrawnThisRound: [], // Track who has drawn in current round
+      totalDrawersNeeded: 0, // How many players need to draw this round
+      isChoosingWord: false
     },
-    timer: null
+    timer: null,
+    wordSelectionTimer: null
   };
   
   rooms.set(roomId, room);
@@ -110,20 +113,36 @@ function createRevealedWord(word, hintsRevealed = 0) {
 function startRound(room) {
   console.log(`🎯 Starting round ${room.gameState.currentRound + 1} for room ${room.id}`);
   
+  // Increment round number
   room.gameState.currentRound++;
-  room.gameState.timeLeft = room.settings.drawTime;
-  room.gameState.hintsRevealed = 0;
   
+  // Reset round state
+  room.gameState.playersWhoHaveDrawnThisRound = [];
+  room.gameState.totalDrawersNeeded = room.players.length;
+  room.gameState.hintsRevealed = 0;
+  room.gameState.currentWord = '';
+  room.gameState.wordChoices = [];
+  room.gameState.isChoosingWord = false;
+  
+  console.log(`📊 Round ${room.gameState.currentRound}: Need ${room.gameState.totalDrawersNeeded} players to draw`);
+  
+  // Start first turn of the round
+  startNextTurn(room);
+}
+
+function startNextTurn(room) {
   // Select next drawer (rotate through players)
   room.gameState.currentDrawerIndex = (room.gameState.currentDrawerIndex + 1) % room.players.length;
   const nextDrawer = room.players[room.gameState.currentDrawerIndex];
   
   room.gameState.currentDrawer = nextDrawer.id;
+  room.gameState.isChoosingWord = true;
+  room.gameState.timeLeft = 15; // 15 seconds for word selection
   
-  // Add to players who have drawn
-  if (!room.gameState.playersWhoHaveDrawn.includes(nextDrawer.id)) {
-    room.gameState.playersWhoHaveDrawn.push(nextDrawer.id);
-  }
+  // Add to players who have drawn this round
+  room.gameState.playersWhoHaveDrawnThisRound.push(nextDrawer.id);
+  
+  console.log(`🎨 Turn started: ${nextDrawer.name} is drawing (${room.gameState.playersWhoHaveDrawnThisRound.length}/${room.gameState.totalDrawersNeeded})`);
   
   // Generate word choices for the drawer
   room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
@@ -156,36 +175,61 @@ function startRound(room) {
     }
   });
   
-  // Start word selection timer
-  setTimeout(() => {
-    if (rooms.has(room.id) && !room.gameState.currentWord) {
-      // Auto-select first word if drawer didn't choose
-      selectWord(room, room.gameState.wordChoices[0]);
+  // Start word selection timer with countdown
+  const wordSelectionCountdown = setInterval(() => {
+    room.gameState.timeLeft--;
+    
+    // Broadcast time update during word selection
+    io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
+    
+    if (room.gameState.timeLeft <= 0) {
+      clearInterval(wordSelectionCountdown);
+      if (rooms.has(room.id) && room.gameState.isChoosingWord) {
+        // Auto-select first word if drawer didn't choose
+        console.log(`⏰ Auto-selecting word for room ${room.id}`);
+        selectWord(room, room.gameState.wordChoices[0]);
+      }
     }
-  }, 15000);
+  }, 1000);
+  
+  // Store the countdown interval
+  room.wordSelectionTimer = wordSelectionCountdown;
 }
 
 function selectWord(room, selectedWord) {
+  console.log(`📝 Word selected: ${selectedWord} for room ${room.id}`);
+  
+  // Clear word selection timer
+  if (room.wordSelectionTimer) {
+    clearInterval(room.wordSelectionTimer);
+    room.wordSelectionTimer = null;
+  }
+  
   room.gameState.currentWord = selectedWord;
   room.gameState.wordChoices = [];
+  room.gameState.timeLeft = room.settings.drawTime; // Set actual drawing time
+  room.gameState.isChoosingWord = false;
   
   const revealedWord = createRevealedWord(room.gameState.currentWord);
   
-  // Notify all players about round start
+  // Notify all players about turn start
   room.players.forEach(player => {
     const socket = players.get(player.id);
     if (socket) {
-      socket.emit('round-started', {
+      socket.emit('turn-started', {
         currentRound: room.gameState.currentRound,
         timeLeft: room.gameState.timeLeft,
         drawingPlayerId: room.gameState.currentDrawer,
+        drawingPlayerName: room.players.find(p => p.id === room.gameState.currentDrawer)?.name,
         currentWord: player.id === room.gameState.currentDrawer ? room.gameState.currentWord : undefined,
-        revealedWord: revealedWord
+        revealedWord: revealedWord,
+        turnNumber: room.gameState.playersWhoHaveDrawnThisRound.length,
+        totalTurns: room.gameState.totalDrawersNeeded
       });
     }
   });
   
-  // Start timer
+  // Start drawing timer
   room.timer = setInterval(() => {
     room.gameState.timeLeft--;
     
@@ -204,19 +248,24 @@ function selectWord(room, selectedWord) {
       }
     }
     
-    // End round when time is up
+    // End turn when time is up
     if (room.gameState.timeLeft <= 0) {
-      endRound(room);
+      endTurn(room);
     }
   }, 1000);
 }
 
-function endRound(room) {
-  console.log(`🏁 Ending round ${room.gameState.currentRound} for room ${room.id}`);
+function endTurn(room) {
+  console.log(`🏁 Ending turn for room ${room.id}. Players drawn: ${room.gameState.playersWhoHaveDrawnThisRound.length}/${room.gameState.totalDrawersNeeded}`);
   
   if (room.timer) {
     clearInterval(room.timer);
     room.timer = null;
+  }
+  
+  if (room.wordSelectionTimer) {
+    clearInterval(room.wordSelectionTimer);
+    room.wordSelectionTimer = null;
   }
   
   // Reset drawing status
@@ -224,42 +273,47 @@ function endRound(room) {
     player.isDrawing = false;
   });
   
-  // Broadcast round end with the correct word
+  // Broadcast turn end with the correct word
   const scores = {};
   room.players.forEach(player => {
     scores[player.id] = player.score;
   });
   
-  io.to(room.id).emit('round-ended', { 
+  io.to(room.id).emit('turn-ended', { 
     scores,
     correctWord: room.gameState.currentWord
   });
   
-  // Reset round state
+  // Reset turn state
   room.gameState.currentWord = '';
   room.gameState.wordChoices = [];
   room.gameState.hintsRevealed = 0;
+  room.gameState.isChoosingWord = false;
   
-  // Check if all players have drawn in this round
-  const allPlayersHaveDrawn = room.gameState.playersWhoHaveDrawn.length >= room.players.length;
-  
-  // Check if game should end (all rounds completed OR all players have drawn)
-  if (room.gameState.currentRound >= room.settings.totalRounds || allPlayersHaveDrawn) {
-    // If all players have drawn but we haven't reached max rounds, reset for next round
-    if (allPlayersHaveDrawn && room.gameState.currentRound < room.settings.totalRounds) {
-      room.gameState.playersWhoHaveDrawn = [];
-    } else {
+  // Check if round is complete (all players have drawn)
+  if (room.gameState.playersWhoHaveDrawnThisRound.length >= room.gameState.totalDrawersNeeded) {
+    console.log(`✅ Round ${room.gameState.currentRound} completed for room ${room.id}`);
+    
+    // Check if game should end
+    if (room.gameState.currentRound >= room.settings.totalRounds) {
       endGame(room);
       return;
     }
+    
+    // Start next round after a delay
+    setTimeout(() => {
+      if (rooms.has(room.id)) {
+        startRound(room);
+      }
+    }, 5000);
+  } else {
+    // Continue with next turn in the same round
+    setTimeout(() => {
+      if (rooms.has(room.id)) {
+        startNextTurn(room);
+      }
+    }, 3000);
   }
-  
-  // Start next round after a delay
-  setTimeout(() => {
-    if (rooms.has(room.id)) {
-      startRound(room);
-    }
-  }, 5000);
 }
 
 function endGame(room) {
@@ -307,7 +361,7 @@ io.on('connection', (socket) => {
       
       console.log(`✅ Room ${roomId} created successfully with host: ${player.name}`);
       
-      // Send response to client - FIXED: Send both events
+      // Send response to client
       socket.emit('room-created', { roomId });
       
       // Immediately send player list to show host in room
@@ -440,11 +494,11 @@ io.on('connection', (socket) => {
       room.gameState.isPlaying = true;
       room.gameState.currentRound = 0;
       room.gameState.currentDrawerIndex = -1; // Reset drawer index
-      room.gameState.playersWhoHaveDrawn = []; // Reset players who have drawn
       
       // Initialize scores
       room.players.forEach(player => {
         room.gameState.scores[player.id] = 0;
+        player.score = 0;
       });
       
       console.log(`✅ Game started for room ${roomId} by host: ${room.players[0].name}`);
@@ -477,6 +531,7 @@ io.on('connection', (socket) => {
       const room = rooms.get(roomId);
       
       if (!room || !room.gameState.wordChoices.includes(selectedWord)) {
+        console.log('❌ Invalid word selection');
         return;
       }
       
@@ -531,8 +586,8 @@ io.on('connection', (socket) => {
         // Notify about score update
         io.to(roomId).emit('player-guessed', { playerId, score: player.score });
         
-        // End round if someone guessed correctly
-        endRound(room);
+        // End turn if someone guessed correctly
+        endTurn(room);
         
       } else if (!room.gameState.isPlaying || !player.isDrawing) {
         // Regular chat message (allowed in lobby or if not drawing during game)
@@ -584,6 +639,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('undo', (data) => {
+    try {
+      const { roomId } = data;
+      
+      // Broadcast undo to all other players in the room
+      socket.to(roomId).emit('undo-canvas');
+      
+    } catch (error) {
+      console.error('❌ Error handling undo event:', error);
+    }
+  });
+
+  socket.on('redo', (data) => {
+    try {
+      const { roomId } = data;
+      
+      // Broadcast redo to all other players in the room
+      socket.to(roomId).emit('redo-canvas');
+      
+    } catch (error) {
+      console.error('❌ Error handling redo event:', error);
+    }
+  });
+
   socket.on('leave-room', (data) => {
     console.log('🚪 Received leave-room event:', data);
     
@@ -606,6 +685,9 @@ io.on('connection', (socket) => {
       if (room.players.length === 0) {
         if (room.timer) {
           clearInterval(room.timer);
+        }
+        if (room.wordSelectionTimer) {
+          clearInterval(room.wordSelectionTimer);
         }
         rooms.delete(roomId);
         console.log(`🧹 Room ${roomId} deleted (empty)`);
@@ -650,6 +732,9 @@ io.on('connection', (socket) => {
             if (room.players.length === 0) {
               if (room.timer) {
                 clearInterval(room.timer);
+              }
+              if (room.wordSelectionTimer) {
+                clearInterval(room.wordSelectionTimer);
               }
               rooms.delete(roomId);
               console.log(`🧹 Room ${roomId} deleted (empty after disconnect)`);
