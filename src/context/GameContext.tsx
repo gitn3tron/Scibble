@@ -1,4 +1,52 @@
-e: () => void;
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useSocket } from './SocketContext';
+
+interface Player {
+  id: string;
+  name: string;
+  avatar: {
+    eyes: string;
+    mouth: string;
+    color: string;
+  };
+  score: number;
+  isDrawing: boolean;
+}
+
+interface GameState {
+  roomId: string | null;
+  players: Player[];
+  currentRound: number;
+  totalRounds: number;
+  timeLeft: number;
+  currentWord: string;
+  revealedWord: string;
+  hints: number;
+  isPlaying: boolean;
+  messages: Message[];
+  wordChoices: string[];
+  isChoosingWord: boolean;
+  drawingPlayerName: string;
+  turnNumber: number;
+  totalTurns: number;
+}
+
+interface Message {
+  id: string;
+  playerId: string;
+  playerName: string;
+  text: string;
+  type: 'chat' | 'system' | 'correct-guess';
+  timestamp: number;
+}
+
+interface GameContextType {
+  player: Player | null;
+  setPlayer: (player: Player) => void;
+  gameState: GameState;
+  createRoom: (settings: GameSettings) => void;
+  joinRoom: (roomId: string) => void;
+  startGame: () => void;
   sendMessage: (message: string) => void;
   leaveRoom: () => void;
   selectWord: (word: string) => void;
@@ -72,16 +120,26 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
-      console.log('📝 Received word-choices event:', data);
-      console.log('📝 Current player ID:', player?.id);
-      console.log('📝 Setting word choices:', data.choices);
+      console.log('📝 CRITICAL: Received word-choices event:', data);
+      console.log('📝 CRITICAL: Current player ID:', player?.id);
+      console.log('📝 CRITICAL: Word choices received:', data.choices);
+      console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      setGameState(prev => ({
-        ...prev,
-        wordChoices: data.choices, // CRITICAL: Set the word choices
-        timeLeft: data.timeLimit,
-        isChoosingWord: false // Drawing player is not in "choosing" state when they have the modal
-      }));
+      // IMMEDIATE state update - this should trigger the modal
+      setGameState(prev => {
+        const newState = {
+          ...prev,
+          wordChoices: data.choices, // CRITICAL: Set the word choices array
+          timeLeft: data.timeLimit,
+          isChoosingWord: false // Drawing player gets the modal, not the waiting state
+        };
+        console.log('📝 CRITICAL: New state after word-choices:', {
+          wordChoices: newState.wordChoices,
+          wordChoicesLength: newState.wordChoices.length,
+          timeLeft: newState.timeLeft
+        });
+        return newState;
+      });
     });
 
     socket.on('drawer-choosing', (data: {
@@ -272,21 +330,22 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const selectWord = (word: string) => {
-    console.log('📝 selectWord called with:', word);
+    console.log('📝 CRITICAL: selectWord called with word:', word);
+    console.log('📝 CRITICAL: Current gameState.wordChoices:', gameState.wordChoices);
     
     if (!socket || !gameState.roomId) {
       console.error('❌ No socket connection or roomId for selectWord');
       return;
     }
 
-    console.log('📤 Emitting word-selected event to server...');
+    console.log('📤 CRITICAL: Emitting word-selected event to server...');
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
-    console.log('✅ word-selected event emitted successfully');
+    console.log('✅ CRITICAL: word-selected event emitted successfully');
     
-    // CRITICAL: Clear word choices immediately after selection
+    // CRITICAL: Clear word choices immediately after selection to hide modal
     setGameState(prev => ({
       ...prev,
-      wordChoices: [], // This will hide the modal
+      wordChoices: [], // This will hide the modal immediately
       isChoosingWord: false
     }));
   };
