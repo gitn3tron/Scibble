@@ -137,7 +137,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, rect.width, rect.height);
       
-      // Reset undo/redo stacks
+      // Reset undo/redo stacks for all players
       const initialState: DrawingState = {
         imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
         timestamp: Date.now()
@@ -147,26 +147,32 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     const handleUndoCanvas = () => {
-      if (undoStack.length <= 1) return;
-      
-      const currentState = undoStack[undoStack.length - 1];
-      const previousState = undoStack[undoStack.length - 2];
-      
-      setRedoStack(prev => [...prev, currentState]);
-      setUndoStack(prev => prev.slice(0, -1));
-      
-      ctx.putImageData(previousState.imageData, 0, 0);
+      // FIXED: Apply undo to all players' canvases
+      setUndoStack(prev => {
+        if (prev.length <= 1) return prev;
+        
+        const currentState = prev[prev.length - 1];
+        const previousState = prev[prev.length - 2];
+        
+        setRedoStack(redoPrev => [...redoPrev, currentState]);
+        ctx.putImageData(previousState.imageData, 0, 0);
+        
+        return prev.slice(0, -1);
+      });
     };
 
     const handleRedoCanvas = () => {
-      if (redoStack.length === 0) return;
-      
-      const stateToRestore = redoStack[redoStack.length - 1];
-      
-      setUndoStack(prev => [...prev, stateToRestore]);
-      setRedoStack(prev => prev.slice(0, -1));
-      
-      ctx.putImageData(stateToRestore.imageData, 0, 0);
+      // FIXED: Apply redo to all players' canvases
+      setRedoStack(prev => {
+        if (prev.length === 0) return prev;
+        
+        const stateToRestore = prev[prev.length - 1];
+        
+        setUndoStack(undoPrev => [...undoPrev, stateToRestore]);
+        ctx.putImageData(stateToRestore.imageData, 0, 0);
+        
+        return prev.slice(0, -1);
+      });
     };
 
     socket.on('drawing-data', handleDrawingData);
@@ -180,7 +186,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       socket.off('undo-canvas', handleUndoCanvas);
       socket.off('redo-canvas', handleRedoCanvas);
     };
-  }, [socket, ctx, undoStack, redoStack]);
+  }, [socket, ctx]);
 
   const saveState = useCallback(() => {
     if (!ctx || !canvasRef.current) return;

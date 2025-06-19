@@ -120,13 +120,26 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
-      console.log('📝 Received word-choices event:', data);
-      setGameState(prev => ({
-        ...prev,
-        wordChoices: data.choices,
-        isChoosingWord: true,
-        timeLeft: data.timeLimit
-      }));
+      console.log('📝 CRITICAL: Received word-choices event:', data);
+      console.log('📝 CRITICAL: Current player ID:', player?.id);
+      console.log('📝 CRITICAL: Word choices received:', data.choices);
+      console.log('📝 CRITICAL: Time limit:', data.timeLimit);
+      
+      // IMMEDIATE state update - this should trigger the modal
+      setGameState(prev => {
+        const newState = {
+          ...prev,
+          wordChoices: data.choices, // CRITICAL: Set the word choices array
+          timeLeft: data.timeLimit,
+          isChoosingWord: false // Drawing player gets the modal, not the waiting state
+        };
+        console.log('📝 CRITICAL: New state after word-choices:', {
+          wordChoices: newState.wordChoices,
+          wordChoicesLength: newState.wordChoices.length,
+          timeLeft: newState.timeLeft
+        });
+        return newState;
+      });
     });
 
     socket.on('drawer-choosing', (data: {
@@ -140,8 +153,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentRound: data.currentRound,
         drawingPlayerName: data.drawingPlayerName,
         timeLeft: data.timeLeft,
-        isChoosingWord: false,
-        wordChoices: []
+        isChoosingWord: true, // Set to true for waiting players
+        wordChoices: [] // Clear word choices for non-drawing players
       }));
     });
 
@@ -164,8 +177,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drawingPlayerName: data.drawingPlayerName,
         turnNumber: data.turnNumber,
         totalTurns: data.totalTurns,
-        isChoosingWord: false,
-        wordChoices: [],
+        isChoosingWord: false, // Clear choosing state when turn actually starts
+        wordChoices: [], // Clear word choices when turn starts
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -211,7 +224,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isDrawing: false
         })),
         currentWord: '',
-        revealedWord: data.correctWord
+        revealedWord: data.correctWord,
+        wordChoices: [], // Clear word choices when turn ends
+        isChoosingWord: false // Clear choosing state when turn ends
       }));
     });
 
@@ -224,7 +239,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...p,
           score: data.finalScores[p.id] || p.score,
           isDrawing: false
-        }))
+        })),
+        wordChoices: [], // Clear word choices when game ends
+        isChoosingWord: false // Clear choosing state when game ends
       }));
     });
 
@@ -313,16 +330,24 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const selectWord = (word: string) => {
-    console.log('📝 selectWord called with:', word);
+    console.log('📝 CRITICAL: selectWord called with word:', word);
+    console.log('📝 CRITICAL: Current gameState.wordChoices:', gameState.wordChoices);
     
     if (!socket || !gameState.roomId) {
       console.error('❌ No socket connection or roomId for selectWord');
       return;
     }
 
-    console.log('📤 Emitting word-selected event to server...');
+    console.log('📤 CRITICAL: Emitting word-selected event to server...');
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
-    console.log('✅ word-selected event emitted successfully');
+    console.log('✅ CRITICAL: word-selected event emitted successfully');
+    
+    // CRITICAL: Clear word choices immediately after selection to hide modal
+    setGameState(prev => ({
+      ...prev,
+      wordChoices: [], // This will hide the modal immediately
+      isChoosingWord: false
+    }));
   };
 
   const sendMessage = (message: string) => {

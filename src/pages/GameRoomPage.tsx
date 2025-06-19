@@ -129,8 +129,32 @@ const GameRoomPage: React.FC = () => {
     );
   };
 
-  // Show word selection modal if player is choosing word
-  if (gameState.isChoosingWord && gameState.wordChoices.length > 0 && isDrawing) {
+  // CRITICAL DEBUG LOGGING - This will show us exactly what's happening
+  console.log('🔍 CRITICAL GameRoomPage Debug State:', {
+    playerId: player?.id,
+    isDrawing,
+    wordChoices: gameState.wordChoices,
+    wordChoicesLength: gameState.wordChoices?.length || 0,
+    isChoosingWord: gameState.isChoosingWord,
+    drawingPlayerName: gameState.drawingPlayerName,
+    timeLeft: gameState.timeLeft,
+    isPlaying: gameState.isPlaying,
+    currentRound: gameState.currentRound,
+    // Show the exact condition values
+    conditionCheck: {
+      gameStateIsPlaying: gameState.isPlaying,
+      isDrawingCheck: isDrawing,
+      wordChoicesExists: !!gameState.wordChoices,
+      wordChoicesLength: gameState.wordChoices?.length || 0,
+      finalCondition: gameState.isPlaying && isDrawing && gameState.wordChoices && gameState.wordChoices.length > 0
+    }
+  });
+
+  // CRITICAL: Show word selection modal when drawing player has word choices
+  // This condition should be TRUE when the server sends word choices to the drawing player
+  if (gameState.isPlaying && isDrawing && gameState.wordChoices && gameState.wordChoices.length > 0) {
+    console.log('✅ CRITICAL: Showing word selection modal for drawing player');
+    console.log('✅ CRITICAL: Word choices to display:', gameState.wordChoices);
     return (
       <>
         <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
@@ -148,8 +172,9 @@ const GameRoomPage: React.FC = () => {
     );
   }
 
-  // Show waiting screen if someone else is choosing word
-  if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing) {
+  // Show waiting screen for non-drawing players when someone is choosing word
+  if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing && gameState.drawingPlayerName) {
+    console.log('✅ Showing waiting screen for non-drawing player');
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
         <div className="text-center">
