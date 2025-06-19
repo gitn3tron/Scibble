@@ -129,18 +129,22 @@ const GameRoomPage: React.FC = () => {
     );
   };
 
-  // Debug logging
-  console.log('🔍 GameRoomPage Debug:', {
+  // Enhanced debug logging
+  console.log('🔍 GameRoomPage Debug State:', {
+    playerId: player?.id,
     isDrawing,
     wordChoices: gameState.wordChoices,
     wordChoicesLength: gameState.wordChoices.length,
     isChoosingWord: gameState.isChoosingWord,
-    playerId: player?.id,
-    drawingPlayerName: gameState.drawingPlayerName
+    drawingPlayerName: gameState.drawingPlayerName,
+    timeLeft: gameState.timeLeft,
+    isPlaying: gameState.isPlaying,
+    currentRound: gameState.currentRound
   });
 
-  // FIXED: Show word selection modal for the drawing player when they have word choices
-  if (isDrawing && gameState.wordChoices.length > 0) {
+  // FIXED: Show word selection modal when drawing player has word choices
+  // This is the PRIMARY condition - if you're drawing and have word choices, show the modal
+  if (gameState.isPlaying && isDrawing && gameState.wordChoices && gameState.wordChoices.length > 0) {
     console.log('✅ Showing word selection modal for drawing player');
     return (
       <>

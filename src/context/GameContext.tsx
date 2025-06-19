@@ -121,11 +121,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
       console.log('📝 Received word-choices event:', data);
+      console.log('📝 Current player ID:', player?.id);
+      console.log('📝 Setting word choices:', data.choices);
+      
       setGameState(prev => ({
         ...prev,
-        wordChoices: data.choices,
-        isChoosingWord: false, // FIXED: Drawing player is not in "choosing" state when they have choices
-        timeLeft: data.timeLimit
+        wordChoices: data.choices, // CRITICAL: Set the word choices
+        timeLeft: data.timeLimit,
+        isChoosingWord: false // Drawing player is not in "choosing" state when they have the modal
       }));
     });
 
@@ -164,8 +167,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drawingPlayerName: data.drawingPlayerName,
         turnNumber: data.turnNumber,
         totalTurns: data.totalTurns,
-        isChoosingWord: false, // FIXED: Clear choosing state when turn actually starts
-        wordChoices: [], // FIXED: Clear word choices when turn starts
+        isChoosingWord: false, // Clear choosing state when turn actually starts
+        wordChoices: [], // Clear word choices when turn starts
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -212,8 +215,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })),
         currentWord: '',
         revealedWord: data.correctWord,
-        wordChoices: [], // FIXED: Clear word choices when turn ends
-        isChoosingWord: false // FIXED: Clear choosing state when turn ends
+        wordChoices: [], // Clear word choices when turn ends
+        isChoosingWord: false // Clear choosing state when turn ends
       }));
     });
 
@@ -227,8 +230,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           score: data.finalScores[p.id] || p.score,
           isDrawing: false
         })),
-        wordChoices: [], // FIXED: Clear word choices when game ends
-        isChoosingWord: false // FIXED: Clear choosing state when game ends
+        wordChoices: [], // Clear word choices when game ends
+        isChoosingWord: false // Clear choosing state when game ends
       }));
     });
 
@@ -328,10 +331,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
     console.log('✅ word-selected event emitted successfully');
     
-    // FIXED: Clear word choices immediately after selection
+    // CRITICAL: Clear word choices immediately after selection
     setGameState(prev => ({
       ...prev,
-      wordChoices: [],
+      wordChoices: [], // This will hide the modal
       isChoosingWord: false
     }));
   };
