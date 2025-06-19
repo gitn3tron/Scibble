@@ -125,7 +125,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      // IMMEDIATE state update - this should trigger the modal
+      // CRITICAL FIX: Immediately set word choices and clear choosing state
       setGameState(prev => {
         const newState = {
           ...prev,
@@ -136,7 +136,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('📝 CRITICAL: New state after word-choices:', {
           wordChoices: newState.wordChoices,
           wordChoicesLength: newState.wordChoices.length,
-          timeLeft: newState.timeLeft
+          timeLeft: newState.timeLeft,
+          isChoosingWord: newState.isChoosingWord
         });
         return newState;
       });
@@ -188,6 +189,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('time-update', (data: { timeLeft: number }) => {
+      // CRITICAL FIX: Always update time, including during word selection
+      console.log('⏰ Time update received:', data.timeLeft);
       setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
     });
 

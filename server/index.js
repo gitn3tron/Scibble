@@ -154,14 +154,16 @@ function startNextTurn(room) {
     player.isDrawing = player.id === nextDrawer.id;
   });
   
-  // Notify drawer about word choices
+  // CRITICAL FIX: Send word choices to the specific drawer socket
   const drawerSocket = players.get(nextDrawer.id);
   if (drawerSocket) {
-    console.log(`📤 Sending word choices to drawer ${nextDrawer.name}:`, room.gameState.wordChoices);
+    console.log(`📤 CRITICAL: Sending word choices to drawer ${nextDrawer.name} (${nextDrawer.id}):`, room.gameState.wordChoices);
     drawerSocket.emit('word-choices', {
       choices: room.gameState.wordChoices,
       timeLimit: 15 // 15 seconds to choose
     });
+  } else {
+    console.error(`❌ CRITICAL: Drawer socket not found for ${nextDrawer.name} (${nextDrawer.id})`);
   }
   
   // Notify other players that drawer is choosing
@@ -179,11 +181,13 @@ function startNextTurn(room) {
     }
   });
   
-  // Start word selection timer with countdown
+  // CRITICAL FIX: Start word selection timer with proper countdown
   const wordSelectionCountdown = setInterval(() => {
     room.gameState.timeLeft--;
     
-    // Broadcast time update during word selection
+    console.log(`⏰ Word selection countdown: ${room.gameState.timeLeft}s remaining for room ${room.id}`);
+    
+    // CRITICAL: Broadcast time update to ALL players during word selection
     io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
     
     if (room.gameState.timeLeft <= 0) {
@@ -422,16 +426,16 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check room capacity AFTER checking for existing player
-      if (room.players.length >= room.settings.totalPlayers) {
-        console.log(`❌ Room ${roomId} is full`);
-        socket.emit('error', { message: 'Room is full' });
-        return;
-      }
-      
       if (room.gameState.isPlaying) {
         console.log(`❌ Game in room ${roomId} already in progress`);
         socket.emit('error', { message: 'Game already in progress' });
+        return;
+      }
+      
+      // FIXED: Check room capacity AFTER checking for existing player
+      if (room.players.length >= room.settings.totalPlayers) {
+        console.log(`❌ Room ${roomId} is full`);
+        socket.emit('error', { message: 'Room is full' });
         return;
       }
       
@@ -528,7 +532,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('word-selected', (data) => {
-    console.log('📝 Received word-selected event:', data);
+    console.log('📝 CRITICAL: Received word-selected event:', data);
     
     try {
       const { roomId, selectedWord } = data;
@@ -539,6 +543,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      console.log(`✅ CRITICAL: Valid word selection: ${selectedWord} for room ${roomId}`);
       selectWord(room, selectedWord);
       
     } catch (error) {
@@ -617,7 +622,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId, from, to, color, brushSize, tool } = data;
       
-      // Broadcast drawing data to all other players in the room
+      // CRITICAL FIX: Broadcast drawing data to ALL other players in the room
       socket.to(roomId).emit('drawing-data', {
         from,
         to,
@@ -635,7 +640,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast clear canvas to all other players in the room
+      // CRITICAL FIX: Broadcast clear canvas to ALL other players in the room
       socket.to(roomId).emit('clear-canvas');
       
     } catch (error) {
@@ -647,7 +652,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast undo to all other players in the room
+      // CRITICAL FIX: Broadcast undo to ALL other players in the room
       socket.to(roomId).emit('undo-canvas');
       
     } catch (error) {
@@ -659,7 +664,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast redo to all other players in the room
+      // CRITICAL FIX: Broadcast redo to ALL other players in the room
       socket.to(roomId).emit('redo-canvas');
       
     } catch (error) {

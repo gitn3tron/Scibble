@@ -90,10 +90,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
 
     if (socket) {
       socket.on('turn-started', clearCanvasForNewTurn);
-      socket.on('clear-canvas', clearCanvasForNewTurn);
       return () => {
         socket.off('turn-started', clearCanvasForNewTurn);
-        socket.off('clear-canvas', clearCanvasForNewTurn);
       };
     }
   }, [socket, ctx]);
@@ -116,6 +114,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
       brushSize: number;
       tool: 'brush' | 'eraser' | 'fill';
     }) => {
+      console.log('🎨 Received drawing data from other player:', data);
+      
       if (data.tool === 'fill') {
         floodFill(data.from.x, data.from.y, data.color, false);
       } else {
@@ -130,6 +130,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     const handleClearCanvas = () => {
+      console.log('🧹 Received clear canvas from other player');
       if (!canvasRef.current) return;
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
@@ -147,7 +148,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     const handleUndoCanvas = () => {
-      // FIXED: Apply undo to all players' canvases
+      console.log('↩️ Received undo from other player');
+      // CRITICAL FIX: Apply undo to all players' canvases
       setUndoStack(prev => {
         if (prev.length <= 1) return prev;
         
@@ -162,7 +164,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     };
 
     const handleRedoCanvas = () => {
-      // FIXED: Apply redo to all players' canvases
+      console.log('↪️ Received redo from other player');
+      // CRITICAL FIX: Apply redo to all players' canvases
       setRedoStack(prev => {
         if (prev.length === 0) return prev;
         
@@ -262,6 +265,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     ctx.putImageData(imageData, 0, 0);
     
     if (broadcast && socket && roomId && isDrawing) {
+      console.log('🪣 Broadcasting fill action to other players');
       socket.emit('draw', {
         roomId,
         from: { x: startX, y: startY },
@@ -328,6 +332,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     
     // Send drawing data to server
     if (socket && roomId) {
+      console.log('🎨 Broadcasting drawing data to other players');
       socket.emit('draw', {
         roomId,
         from: lastPoint,
@@ -357,12 +362,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     ctx.fillRect(0, 0, rect.width, rect.height);
     
     if (broadcast && socket && roomId && isDrawing) {
+      console.log('🧹 Broadcasting clear canvas to other players');
       socket.emit('clear', { roomId });
     }
   }, [ctx, saveState, socket, roomId, isDrawing]);
 
   const undo = useCallback(() => {
     if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
+    
+    console.log('↩️ Performing undo operation');
     
     const currentState = undoStack[undoStack.length - 1];
     const previousState = undoStack[undoStack.length - 2];
@@ -374,12 +382,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     
     // Broadcast undo to other players
     if (socket && roomId && isDrawing) {
+      console.log('↩️ Broadcasting undo to other players');
       socket.emit('undo', { roomId });
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
   const redo = useCallback(() => {
     if (!ctx || !canvasRef.current || redoStack.length === 0) return;
+    
+    console.log('↪️ Performing redo operation');
     
     const stateToRestore = redoStack[redoStack.length - 1];
     
@@ -390,6 +401,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     
     // Broadcast redo to other players
     if (socket && roomId && isDrawing) {
+      console.log('↪️ Broadcasting redo to other players');
       socket.emit('redo', { roomId });
     }
   }, [ctx, redoStack, socket, roomId, isDrawing]);
