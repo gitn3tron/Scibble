@@ -13,13 +13,14 @@ const HomePage: React.FC = () => {
   const [avatar, setAvatar] = useState({
     eyes: 'normal',
     mouth: 'smile',
-    color: '#8B5CF6'
+    color: '#FF6B6B',
+    accessory: 'none',
+    eyebrows: 'normal'
   });
   const [nameError, setNameError] = useState('');
   const [roomError, setRoomError] = useState('');
 
   useEffect(() => {
-    // Check for name in localStorage to provide a better UX
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
       setName(savedName);
@@ -89,20 +90,20 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden text-gray-800 transition-all duration-300 hover:shadow-2xl">
-        <div className="p-6 bg-purple-600 flex items-center justify-center">
+      <div className="w-full max-w-lg bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden text-white transition-all duration-300 hover:shadow-3xl border border-white/20">
+        <div className="p-8 bg-gradient-to-r from-purple-600/80 to-indigo-600/80 backdrop-blur-sm flex items-center justify-center">
           <div className="flex flex-col items-center">
-            <PencilRuler size={48} className="text-white mb-2" />
-            <h1 className="text-3xl font-bold text-center text-white">
+            <PencilRuler size={56} className="text-white mb-3 drop-shadow-lg" />
+            <h1 className="text-4xl font-bold text-center text-white drop-shadow-lg">
               Scribble Draw & Guess
             </h1>
-            <p className="text-purple-200 text-center mt-1">Draw, guess, and have fun!</p>
+            <p className="text-purple-100 text-center mt-2 text-lg">Draw, guess, and have fun!</p>
           </div>
         </div>
 
-        <div className="p-6">
-          <div className="mb-6">
-            <label htmlFor="name" className="block text-sm font-semibold mb-2">
+        <div className="p-8">
+          <div className="mb-8">
+            <label htmlFor="name" className="block text-sm font-semibold mb-3 text-white">
               Your Name
             </label>
             <input
@@ -110,24 +111,24 @@ const HomePage: React.FC = () => {
               id="name"
               value={name}
               onChange={handleNameChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                nameError ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 transition-all duration-200 ${
+                nameError ? 'border-red-400 ring-2 ring-red-400' : 'border-white/30 hover:border-white/50'
               }`}
               placeholder="Enter your name"
               maxLength={12}
             />
-            {nameError && <p className="text-red-500 text-xs mt-1">{nameError}</p>}
+            {nameError && <p className="text-red-300 text-sm mt-2 bg-red-500/20 px-3 py-1 rounded-lg">{nameError}</p>}
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-semibold mb-2">
+          <div className="mb-8">
+            <label className="block text-sm font-semibold mb-4 text-white">
               Customize Your Avatar
             </label>
             <AvatarCreator avatar={avatar} setAvatar={setAvatar} />
           </div>
 
-          <div className="mb-6">
-            <label htmlFor="roomCode" className="block text-sm font-semibold mb-2">
+          <div className="mb-8">
+            <label htmlFor="roomCode" className="block text-sm font-semibold mb-3 text-white">
               Room Code (to join existing room)
             </label>
             <input
@@ -135,24 +136,24 @@ const HomePage: React.FC = () => {
               id="roomCode"
               value={roomCode}
               onChange={handleRoomCodeChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                roomError ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 transition-all duration-200 ${
+                roomError ? 'border-red-400 ring-2 ring-red-400' : 'border-white/30 hover:border-white/50'
               }`}
               placeholder="Enter room code to join"
             />
-            {roomError && <p className="text-red-500 text-xs mt-1">{roomError}</p>}
+            {roomError && <p className="text-red-300 text-sm mt-2 bg-red-500/20 px-3 py-1 rounded-lg">{roomError}</p>}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 mt-6">
+          <div className="flex flex-col sm:flex-row gap-4 mt-8">
             <button
               onClick={handleCreateRoom}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 flex-1"
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex-1 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               Create Room
             </button>
             <button
               onClick={handleJoinRoom}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 flex-1"
+              className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex-1 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               Join Room
             </button>

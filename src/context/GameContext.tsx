@@ -8,6 +8,8 @@ interface Player {
     eyes: string;
     mouth: string;
     color: string;
+    accessory: string;
+    eyebrows: string;
   };
   score: number;
   isDrawing: boolean;
@@ -126,14 +128,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      // CRITICAL FIX: This event should ONLY be received by the drawing player
-      // Set word choices immediately for the drawing player
       setGameState(prev => {
         const newState = {
           ...prev,
-          wordChoices: data.choices, // Set the word choices for the drawing player
+          wordChoices: data.choices,
           timeLeft: data.timeLimit,
-          isChoosingWord: false // Drawing player gets the modal, not the waiting state
+          isChoosingWord: false
         };
         console.log('📝 CRITICAL: New state after word-choices:', {
           wordChoices: newState.wordChoices,
@@ -156,14 +156,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('⏳ Current player name:', player?.name);
       console.log('⏳ Drawing player name:', data.drawingPlayerName);
       
-      // This event is for NON-drawing players to show waiting screen
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
         drawingPlayerName: data.drawingPlayerName,
         timeLeft: data.timeLeft,
-        isChoosingWord: true, // Set to true for waiting players
-        wordChoices: [] // Clear word choices for non-drawing players
+        isChoosingWord: true,
+        wordChoices: []
       }));
     });
 
@@ -189,8 +188,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drawingPlayerName: data.drawingPlayerName,
         turnNumber: data.turnNumber,
         totalTurns: data.totalTurns,
-        isChoosingWord: false, // Clear choosing state when turn actually starts
-        wordChoices: [], // Clear word choices when turn starts
+        isChoosingWord: false,
+        wordChoices: [],
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -200,7 +199,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('time-update', (data: { timeLeft: number }) => {
-      // Always update time, including during word selection
       console.log('⏰ Time update received:', data.timeLeft);
       setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
     });
@@ -239,8 +237,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })),
         currentWord: '',
         revealedWord: data.correctWord,
-        wordChoices: [], // Clear word choices when turn ends
-        isChoosingWord: false // Clear choosing state when turn ends
+        wordChoices: [],
+        isChoosingWord: false
       }));
     });
 
@@ -254,12 +252,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           score: data.finalScores[p.id] || p.score,
           isDrawing: false
         })),
-        wordChoices: [], // Clear word choices when game ends
-        isChoosingWord: false // Clear choosing state when game ends
+        wordChoices: [],
+        isChoosingWord: false
       }));
     });
 
-    // Add error event listener
     socket.on('error', (error: any) => {
       console.error('❌ Socket error:', error);
       alert(error.message || 'An error occurred');
@@ -357,10 +354,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
     console.log('✅ CRITICAL: word-selected event emitted successfully');
     
-    // Clear word choices immediately after selection to hide modal
     setGameState(prev => ({
       ...prev,
-      wordChoices: [], // This will hide the modal immediately
+      wordChoices: [],
       isChoosingWord: false
     }));
   };

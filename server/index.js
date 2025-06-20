@@ -6,10 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 const app = express();
 const httpServer = createServer(app);
 
-// Updated CORS and Socket.IO configuration for better connection handling
 const io = new Server(httpServer, {
   cors: {
-    // Allow specific origins in development with protocol matching
     origin: process.env.NODE_ENV === 'production' 
       ? process.env.CLIENT_URL 
       : ['http://localhost:5173', 'http://localhost:3000', 'https://localhost:5173', 'https://localhost:3000'],
@@ -17,18 +15,16 @@ const io = new Server(httpServer, {
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
   },
-  // Improved transport configuration
   transports: ['polling', 'websocket'],
-  pingTimeout: 120000,    // 2 minutes
-  pingInterval: 25000,    // 25 seconds
-  upgradeTimeout: 30000,  // 30 seconds
-  maxHttpBufferSize: 1e8  // 100 MB
+  pingTimeout: 120000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8
 });
 
 // Game state storage
 const rooms = new Map();
-// CRITICAL FIX: Store socket references by player ID for reliable lookup
-const playerSockets = new Map(); // playerId -> socket
+const playerSockets = new Map();
 
 // Default word list
 const defaultWords = [
@@ -39,7 +35,16 @@ const defaultWords = [
   'orange', 'penguin', 'quilt', 'robot', 'sandwich', 'telescope', 'unicorn', 'volcano', 'waterfall', 'x-ray'
 ];
 
-// Utility functions
+// Enhanced scoring system
+const SCORING = {
+  CORRECT_GUESS_BASE: 100,
+  TIME_BONUS_MULTIPLIER: 2,
+  DRAWER_BONUS: 50,
+  WRONG_GUESS_PENALTY: -5,
+  HINT_PENALTY: 10,
+  POSITION_BONUS: [50, 30, 20, 10, 5] // Bonus for 1st, 2nd, 3rd, etc. correct guesses
+};
+
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -47,13 +52,13 @@ function generateRoomId() {
 function createRoom(roomId, settings, hostPlayer) {
   const room = {
     id: roomId,
-    players: [hostPlayer], // Host is ALWAYS the first player (index 0)
+    players: [hostPlayer],
     settings,
     gameState: {
       isPlaying: false,
       currentRound: 0,
       currentDrawer: null,
-      currentDrawerIndex: -1, // Track drawer index for proper rotation
+      currentDrawerIndex: -1,
       currentWord: '',
       wordChoices: [],
       timeLeft: 0,
@@ -61,9 +66,11 @@ function createRoom(roomId, settings, hostPlayer) {
       messages: [],
       wordList: settings.customWordsOnly ? settings.customWords : [...defaultWords, ...settings.customWords],
       hintsRevealed: 0,
-      playersWhoHaveDrawnThisRound: [], // Track who has drawn in current round
-      totalDrawersNeeded: 0, // How many players need to draw this round
-      isChoosingWord: false
+      playersWhoHaveDrawnThisRound: [],
+      totalDrawersNeeded: 0,
+      isChoosingWord: false,
+      correctGuesses: [], // Track order of correct guesses for bonus points
+      wrongGuesses: new Set() // Track wrong guesses for penalties
     },
     timer: null,
     wordSelectionTimer: null
@@ -86,17 +93,14 @@ function createRevealedWord(word, hintsRevealed = 0) {
   const wordArray = word.split('');
   const letterIndices = [];
   
-  // Get all letter positions
   for (let i = 0; i < word.length; i++) {
     if (word[i].match(/[a-zA-Z]/)) {
       letterIndices.push(i);
     }
   }
   
-  // Calculate how many letters to reveal based on hints
   const lettersToReveal = Math.min(hintsRevealed, Math.floor(letterIndices.length * 0.6));
   
-  // Randomly select which letters to reveal
   const revealedIndices = new Set();
   while (revealedIndices.size < lettersToReveal && revealedIndices.size < letterIndices.length) {
     const randomIndex = letterIndices[Math.floor(Math.random() * letterIndices.length)];
@@ -111,61 +115,99 @@ function createRevealedWord(word, hintsRevealed = 0) {
   }).join('');
 }
 
+function calculateScore(room, playerId, isCorrectGuess, timeLeft) {
+  if (!isCorrectGuess) {
+    // Penalty for wrong guess
+    return SCORING.WRONG_GUESS_PENALTY;
+  }
+
+  // Base score for correct guess
+  let score = SCORING.CORRECT_GUESS_BASE;
+  
+  // Time bonus (more points for faster guesses)
+  const timeBonus = Math.floor((timeLeft / room.settings.drawTime) * 100 * SCORING.TIME_BONUS_MULTIPLIER);
+  score += timeBonus;
+  
+  // Position bonus (first correct guess gets more points)
+  const position = room.gameState.correctGuesses.length;
+  if (position < SCORING.POSITION_BONUS.length) {
+    score += SCORING.POSITION_BONUS[position];
+  }
+  
+  // Hint penalty (fewer points if hints were revealed)
+  const hintPenalty = room.gameState.hintsRevealed * SCORING.HINT_PENALTY;
+  score -= hintPenalty;
+  
+  return Math.max(score, 10); // Minimum 10 points for correct guess
+}
+
+function awardDrawerBonus(room) {
+  const drawer = room.players.find(p => p.id === room.gameState.currentDrawer);
+  if (drawer && room.gameState.correctGuesses.length > 0) {
+    // Drawer gets bonus based on how many people guessed correctly
+    const drawerBonus = SCORING.DRAWER_BONUS * room.gameState.correctGuesses.length;
+    drawer.score += drawerBonus;
+    
+    const bonusMessage = {
+      id: uuidv4(),
+      playerId: 'system',
+      playerName: 'System',
+      text: `${drawer.name} earned ${drawerBonus} bonus points for drawing!`,
+      type: 'system',
+      timestamp: Date.now()
+    };
+    
+    addMessage(room, bonusMessage);
+  }
+}
+
 function startRound(room) {
   console.log(`🎯 Starting round ${room.gameState.currentRound + 1} for room ${room.id}`);
   
-  // Increment round number
   room.gameState.currentRound++;
-  
-  // Reset round state
   room.gameState.playersWhoHaveDrawnThisRound = [];
   room.gameState.totalDrawersNeeded = room.players.length;
   room.gameState.hintsRevealed = 0;
   room.gameState.currentWord = '';
   room.gameState.wordChoices = [];
   room.gameState.isChoosingWord = false;
+  room.gameState.correctGuesses = [];
+  room.gameState.wrongGuesses.clear();
   
   console.log(`📊 Round ${room.gameState.currentRound}: Need ${room.gameState.totalDrawersNeeded} players to draw`);
   
-  // Start first turn of the round
   startNextTurn(room);
 }
 
 function startNextTurn(room) {
-  // Select next drawer (rotate through players)
   room.gameState.currentDrawerIndex = (room.gameState.currentDrawerIndex + 1) % room.players.length;
   const nextDrawer = room.players[room.gameState.currentDrawerIndex];
   
   room.gameState.currentDrawer = nextDrawer.id;
   room.gameState.isChoosingWord = true;
-  room.gameState.timeLeft = 15; // 15 seconds for word selection
+  room.gameState.timeLeft = 15;
+  room.gameState.correctGuesses = [];
+  room.gameState.wrongGuesses.clear();
   
-  // Add to players who have drawn this round
   room.gameState.playersWhoHaveDrawnThisRound.push(nextDrawer.id);
   
   console.log(`🎨 Turn started: ${nextDrawer.name} (ID: ${nextDrawer.id}) is drawing (${room.gameState.playersWhoHaveDrawnThisRound.length}/${room.gameState.totalDrawersNeeded})`);
   
-  // Generate word choices for the drawer
   room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
   
   console.log(`📝 Generated word choices for ${nextDrawer.name}:`, room.gameState.wordChoices);
   
-  // CRITICAL FIX: Update player drawing status BEFORE sending events
   room.players.forEach(player => {
     player.isDrawing = player.id === nextDrawer.id;
   });
   
-  // CRITICAL FIX: Send updated player list to ALL players first
   io.to(room.id).emit('player-joined', { players: room.players });
   
-  // CRITICAL FIX: Get the correct socket for the drawing player
   const drawerSocket = playerSockets.get(nextDrawer.id);
   
   if (drawerSocket && drawerSocket.connected) {
     console.log(`📤 CRITICAL: Sending word choices to drawer ${nextDrawer.name} (${nextDrawer.id})`);
-    console.log(`📤 CRITICAL: Drawer socket ID: ${drawerSocket.id}, Connected: ${drawerSocket.connected}`);
     
-    // Send word choices ONLY to the drawing player
     drawerSocket.emit('word-choices', {
       choices: room.gameState.wordChoices,
       timeLimit: 15
@@ -175,11 +217,8 @@ function startNextTurn(room) {
     
   } else {
     console.error(`❌ CRITICAL: Drawer socket not found or disconnected for ${nextDrawer.name} (${nextDrawer.id})`);
-    console.log(`❌ Available player sockets:`, Array.from(playerSockets.keys()));
-    console.log(`❌ Room players:`, room.players.map(p => ({ id: p.id, name: p.name })));
   }
   
-  // Notify OTHER players that drawer is choosing (exclude the drawer)
   room.players.forEach(player => {
     if (player.id !== nextDrawer.id) {
       const socket = playerSockets.get(player.id);
@@ -194,33 +233,28 @@ function startNextTurn(room) {
     }
   });
   
-  // CRITICAL FIX: Start word selection timer with proper countdown
   const wordSelectionCountdown = setInterval(() => {
     room.gameState.timeLeft--;
     
     console.log(`⏰ Word selection countdown: ${room.gameState.timeLeft}s remaining for room ${room.id}`);
     
-    // CRITICAL: Broadcast time update to ALL players during word selection
     io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
     
     if (room.gameState.timeLeft <= 0) {
       clearInterval(wordSelectionCountdown);
       if (rooms.has(room.id) && room.gameState.isChoosingWord) {
-        // Auto-select first word if drawer didn't choose
         console.log(`⏰ Auto-selecting word for room ${room.id}`);
         selectWord(room, room.gameState.wordChoices[0]);
       }
     }
   }, 1000);
   
-  // Store the countdown interval
   room.wordSelectionTimer = wordSelectionCountdown;
 }
 
 function selectWord(room, selectedWord) {
   console.log(`📝 Word selected: ${selectedWord} for room ${room.id}`);
   
-  // Clear word selection timer
   if (room.wordSelectionTimer) {
     clearInterval(room.wordSelectionTimer);
     room.wordSelectionTimer = null;
@@ -228,12 +262,11 @@ function selectWord(room, selectedWord) {
   
   room.gameState.currentWord = selectedWord;
   room.gameState.wordChoices = [];
-  room.gameState.timeLeft = room.settings.drawTime; // Set actual drawing time
+  room.gameState.timeLeft = room.settings.drawTime;
   room.gameState.isChoosingWord = false;
   
   const revealedWord = createRevealedWord(room.gameState.currentWord);
   
-  // Notify all players about turn start
   room.players.forEach(player => {
     const socket = playerSockets.get(player.id);
     if (socket && socket.connected) {
@@ -250,14 +283,11 @@ function selectWord(room, selectedWord) {
     }
   });
   
-  // Start drawing timer
   room.timer = setInterval(() => {
     room.gameState.timeLeft--;
     
-    // Broadcast time update
     io.to(room.id).emit('time-update', { timeLeft: room.gameState.timeLeft });
     
-    // Check for hints based on settings
     if (room.settings.hintsCount > 0) {
       const hintInterval = Math.floor(room.settings.drawTime / (room.settings.hintsCount + 1));
       const hintsToGive = Math.floor((room.settings.drawTime - room.gameState.timeLeft) / hintInterval);
@@ -269,7 +299,6 @@ function selectWord(room, selectedWord) {
       }
     }
     
-    // End turn when time is up
     if (room.gameState.timeLeft <= 0) {
       endTurn(room);
     }
@@ -289,12 +318,13 @@ function endTurn(room) {
     room.wordSelectionTimer = null;
   }
   
-  // Reset drawing status
+  // Award drawer bonus
+  awardDrawerBonus(room);
+  
   room.players.forEach(player => {
     player.isDrawing = false;
   });
   
-  // Broadcast turn end with the correct word
   const scores = {};
   room.players.forEach(player => {
     scores[player.id] = player.score;
@@ -305,30 +335,27 @@ function endTurn(room) {
     correctWord: room.gameState.currentWord
   });
   
-  // Reset turn state
   room.gameState.currentWord = '';
   room.gameState.wordChoices = [];
   room.gameState.hintsRevealed = 0;
   room.gameState.isChoosingWord = false;
+  room.gameState.correctGuesses = [];
+  room.gameState.wrongGuesses.clear();
   
-  // Check if round is complete (all players have drawn)
   if (room.gameState.playersWhoHaveDrawnThisRound.length >= room.gameState.totalDrawersNeeded) {
     console.log(`✅ Round ${room.gameState.currentRound} completed for room ${room.id}`);
     
-    // Check if game should end
     if (room.gameState.currentRound >= room.settings.totalRounds) {
       endGame(room);
       return;
     }
     
-    // Start next round after a delay
     setTimeout(() => {
       if (rooms.has(room.id)) {
         startRound(room);
       }
     }, 5000);
   } else {
-    // Continue with next turn in the same round
     setTimeout(() => {
       if (rooms.has(room.id)) {
         startNextTurn(room);
@@ -352,7 +379,6 @@ function endGame(room) {
 
 function addMessage(room, message) {
   room.gameState.messages.push(message);
-  // Broadcast to ALL players in the room
   io.to(room.id).emit('new-message', message);
 }
 
@@ -367,29 +393,21 @@ io.on('connection', (socket) => {
       const { player, settings } = data;
       const roomId = generateRoomId();
       
-      // Initialize player scores
       player.score = 0;
       player.isDrawing = false;
       
-      // CRITICAL FIX: Store player socket mapping FIRST
       playerSockets.set(player.id, socket);
       console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
-      // Create room with host as FIRST player
       const room = createRoom(roomId, settings, player);
       
-      // Join socket to room IMMEDIATELY
       socket.join(roomId);
       
       console.log(`✅ Room ${roomId} created successfully with host: ${player.name}`);
       
-      // Send response to client
       socket.emit('room-created', { roomId });
-      
-      // Immediately send player list to show host in room
       socket.emit('player-joined', { players: room.players });
       
-      // Send welcome message
       const welcomeMessage = {
         id: uuidv4(),
         playerId: 'system',
@@ -420,20 +438,16 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check if player is already in room (reconnection)
       const existingPlayerIndex = room.players.findIndex(p => p.id === player.id);
       if (existingPlayerIndex !== -1) {
-        // CRITICAL FIX: Update existing player's socket mapping
         playerSockets.set(player.id, socket);
         console.log(`🔗 CRITICAL: Updated player ${player.name} (${player.id}) with socket ${socket.id}`);
         socket.join(roomId);
         
         console.log(`🔄 Player ${player.name} reconnected to room ${roomId}`);
         
-        // Send current room state
         socket.emit('player-joined', { players: room.players });
         
-        // Send existing messages
         room.gameState.messages.forEach(message => {
           socket.emit('new-message', message);
         });
@@ -447,33 +461,26 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check room capacity AFTER checking for existing player
       if (room.players.length >= room.settings.totalPlayers) {
         console.log(`❌ Room ${roomId} is full`);
         socket.emit('error', { message: 'Room is full' });
         return;
       }
       
-      // Initialize new player
       player.score = 0;
       player.isDrawing = false;
       
-      // CRITICAL FIX: Store player socket mapping FIRST
       playerSockets.set(player.id, socket);
       console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
-      // Add player to room (host remains at index 0)
       room.players.push(player);
       
-      // Join socket to room
       socket.join(roomId);
       
       console.log(`✅ Player ${player.name} joined room ${roomId}. Total players: ${room.players.length}. Host: ${room.players[0].name}`);
       
-      // Notify ALL players in room about updated player list
       io.to(roomId).emit('player-joined', { players: room.players });
       
-      // Send welcome message
       const welcomeMessage = {
         id: uuidv4(),
         playerId: 'system',
@@ -503,7 +510,6 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check if the player starting the game is the host (first player)
       const hostSocket = playerSockets.get(room.players[0].id);
       if (hostSocket?.id !== socket.id) {
         socket.emit('error', { message: 'Only the host can start the game' });
@@ -517,9 +523,8 @@ io.on('connection', (socket) => {
       
       room.gameState.isPlaying = true;
       room.gameState.currentRound = 0;
-      room.gameState.currentDrawerIndex = -1; // Reset drawer index
+      room.gameState.currentDrawerIndex = -1;
       
-      // Initialize scores
       room.players.forEach(player => {
         room.gameState.scores[player.id] = 0;
         player.score = 0;
@@ -527,14 +532,12 @@ io.on('connection', (socket) => {
       
       console.log(`✅ Game started for room ${roomId} by host: ${room.players[0].name}`);
       
-      // Notify all players
       io.to(roomId).emit('game-started', {
         isPlaying: true,
         totalRounds: room.settings.totalRounds,
         currentRound: 0
       });
       
-      // Start first round after a delay
       setTimeout(() => {
         if (rooms.has(roomId)) {
           startRound(room);
@@ -585,37 +588,74 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check if it's a correct guess during gameplay
+      // Enhanced scoring system for guesses
       if (room.gameState.isPlaying && 
           room.gameState.currentWord && 
-          text.toLowerCase().trim() === room.gameState.currentWord.toLowerCase() &&
           playerId !== room.gameState.currentDrawer) {
         
-        // Award points
-        const timeBonus = Math.floor(room.gameState.timeLeft / 10);
-        const points = 100 + timeBonus;
-        player.score += points;
+        const guess = text.toLowerCase().trim();
+        const correctWord = room.gameState.currentWord.toLowerCase();
         
-        // Create correct guess message
-        const correctMessage = {
-          id: uuidv4(),
-          playerId: playerId,
-          playerName: playerName,
-          text: `${playerName} guessed the word correctly! (+${points} points)`,
-          type: 'correct-guess',
-          timestamp: Date.now()
-        };
-        
-        addMessage(room, correctMessage);
-        
-        // Notify about score update
-        io.to(roomId).emit('player-guessed', { playerId, score: player.score });
-        
-        // End turn if someone guessed correctly
-        endTurn(room);
+        if (guess === correctWord) {
+          // Correct guess
+          if (!room.gameState.correctGuesses.includes(playerId)) {
+            const points = calculateScore(room, playerId, true, room.gameState.timeLeft);
+            player.score += points;
+            room.gameState.correctGuesses.push(playerId);
+            
+            const correctMessage = {
+              id: uuidv4(),
+              playerId: playerId,
+              playerName: playerName,
+              text: `${playerName} guessed correctly! (+${points} points)`,
+              type: 'correct-guess',
+              timestamp: Date.now()
+            };
+            
+            addMessage(room, correctMessage);
+            io.to(roomId).emit('player-guessed', { playerId, score: player.score });
+            
+            // End turn if everyone guessed or first correct guess (depending on game mode)
+            if (room.gameState.correctGuesses.length >= room.players.length - 1) {
+              endTurn(room);
+            }
+          }
+        } else {
+          // Wrong guess penalty
+          if (!room.gameState.wrongGuesses.has(playerId)) {
+            const penalty = calculateScore(room, playerId, false, room.gameState.timeLeft);
+            player.score = Math.max(0, player.score + penalty); // Don't go below 0
+            room.gameState.wrongGuesses.add(playerId);
+            
+            // Regular chat message for wrong guess
+            const message = {
+              id: uuidv4(),
+              playerId: playerId,
+              playerName: playerName,
+              text: text,
+              type: 'chat',
+              timestamp: Date.now()
+            };
+            
+            addMessage(room, message);
+            io.to(roomId).emit('player-guessed', { playerId, score: player.score });
+          } else {
+            // Just show the message without penalty (already penalized once)
+            const message = {
+              id: uuidv4(),
+              playerId: playerId,
+              playerName: playerName,
+              text: text,
+              type: 'chat',
+              timestamp: Date.now()
+            };
+            
+            addMessage(room, message);
+          }
+        }
         
       } else if (!room.gameState.isPlaying || !player.isDrawing) {
-        // Regular chat message (allowed in lobby or if not drawing during game)
+        // Regular chat message
         const message = {
           id: uuidv4(),
           playerId: playerId,
@@ -638,7 +678,6 @@ io.on('connection', (socket) => {
     try {
       const { roomId, from, to, color, brushSize, tool } = data;
       
-      // Broadcast drawing data to ALL other players in the room
       socket.to(roomId).emit('drawing-data', {
         from,
         to,
@@ -656,7 +695,6 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast clear canvas to ALL other players in the room
       socket.to(roomId).emit('clear-canvas');
       
     } catch (error) {
@@ -668,7 +706,6 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast undo to ALL other players in the room
       socket.to(roomId).emit('undo-canvas');
       
     } catch (error) {
@@ -680,7 +717,6 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // Broadcast redo to ALL other players in the room
       socket.to(roomId).emit('redo-canvas');
       
     } catch (error) {
@@ -699,14 +735,11 @@ io.on('connection', (socket) => {
       
       const leavingPlayerName = room.players.find(p => p.id === playerId)?.name || 'A player';
       
-      // Remove player from room and socket mapping
       room.players = room.players.filter(p => p.id !== playerId);
       playerSockets.delete(playerId);
       
-      // Leave socket room
       socket.leave(roomId);
       
-      // If room is empty, clean it up
       if (room.players.length === 0) {
         if (room.timer) {
           clearInterval(room.timer);
@@ -717,7 +750,6 @@ io.on('connection', (socket) => {
         rooms.delete(roomId);
         console.log(`🧹 Room ${roomId} deleted (empty)`);
       } else {
-        // Notify remaining players
         io.to(roomId).emit('player-joined', { players: room.players });
         
         const leaveMessage = {
@@ -740,20 +772,16 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`🔌 User disconnected: ${socket.id}`);
     
-    // Find and remove player from any rooms
     for (const [playerId, playerSocket] of playerSockets.entries()) {
       if (playerSocket.id === socket.id) {
-        // Find room containing this player
         for (const [roomId, room] of rooms.entries()) {
           const playerIndex = room.players.findIndex(p => p.id === playerId);
           if (playerIndex !== -1) {
             const disconnectedPlayerName = room.players[playerIndex].name;
             
-            // Remove player
             room.players.splice(playerIndex, 1);
             playerSockets.delete(playerId);
             
-            // Clean up empty room
             if (room.players.length === 0) {
               if (room.timer) {
                 clearInterval(room.timer);
@@ -764,7 +792,6 @@ io.on('connection', (socket) => {
               rooms.delete(roomId);
               console.log(`🧹 Room ${roomId} deleted (empty after disconnect)`);
             } else {
-              // Notify remaining players
               io.to(roomId).emit('player-joined', { players: room.players });
               
               const disconnectMessage = {
@@ -787,7 +814,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start the server with improved error handling
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -796,7 +822,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.error('❌ Server failed to start:', error);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🛑 SIGTERM received, shutting down gracefully');
   httpServer.close(() => {

@@ -1,4 +1,215 @@
-index + 3] = 255;
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useSocket } from '../context/SocketContext';
+import { Paintbrush, Eraser, PaintBucket, Palette, Undo2, Redo2, RefreshCw } from 'lucide-react';
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface CanvasState {
+  imageData: ImageData;
+  timestamp: number;
+}
+
+interface DrawingCanvasProps {
+  isDrawing: boolean;
+  roomId: string;
+}
+
+const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { socket } = useSocket();
+  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [lastPoint, setLastPoint] = useState<Point | null>(null);
+  const [color, setColor] = useState('#000000');
+  const [brushSize, setBrushSize] = useState(3);
+  const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  
+  // Enhanced undo/redo system
+  const [undoStack, setUndoStack] = useState<CanvasState[]>([]);
+  const [redoStack, setRedoStack] = useState<CanvasState[]>([]);
+
+  // Initialize canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    // Set canvas size
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      
+      // Set drawing properties
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    };
+
+    resizeCanvas();
+    setCtx(context);
+
+    // Save initial state
+    const initialState: CanvasState = {
+      imageData: context.getImageData(0, 0, canvas.width, canvas.height),
+      timestamp: Date.now()
+    };
+    setUndoStack([initialState]);
+
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, []);
+
+  // Update drawing properties when tool/color/size changes
+  useEffect(() => {
+    if (!ctx) return;
+    
+    if (tool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = brushSize;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = brushSize;
+    }
+  }, [ctx, tool, color, brushSize]);
+
+  // Socket event listeners for drawing synchronization
+  useEffect(() => {
+    if (!socket || !ctx || !canvasRef.current) return;
+
+    const handleDrawingData = (data: {
+      from: Point;
+      to: Point;
+      color: string;
+      brushSize: number;
+      tool: string;
+    }) => {
+      console.log('🎨 Received drawing data from other player:', data);
+      
+      const prevCompositeOperation = ctx.globalCompositeOperation;
+      const prevStrokeStyle = ctx.strokeStyle;
+      const prevLineWidth = ctx.lineWidth;
+
+      if (data.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else if (data.tool === 'fill') {
+        floodFill(data.from.x, data.from.y, data.color, false);
+        return;
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = data.color;
+      }
+      
+      ctx.lineWidth = data.brushSize;
+      ctx.beginPath();
+      ctx.moveTo(data.from.x, data.from.y);
+      ctx.lineTo(data.to.x, data.to.y);
+      ctx.stroke();
+
+      // Restore previous settings
+      ctx.globalCompositeOperation = prevCompositeOperation;
+      ctx.strokeStyle = prevStrokeStyle;
+      ctx.lineWidth = prevLineWidth;
+    };
+
+    const handleClearCanvas = () => {
+      console.log('🧹 Received clear canvas from other player');
+      clearCanvas(false);
+    };
+
+    const handleUndoCanvas = () => {
+      console.log('↩️ Received undo from other player');
+      performUndo(false);
+    };
+
+    const handleRedoCanvas = () => {
+      console.log('↪️ Received redo from other player');
+      performRedo(false);
+    };
+
+    socket.on('drawing-data', handleDrawingData);
+    socket.on('clear-canvas', handleClearCanvas);
+    socket.on('undo-canvas', handleUndoCanvas);
+    socket.on('redo-canvas', handleRedoCanvas);
+
+    return () => {
+      socket.off('drawing-data', handleDrawingData);
+      socket.off('clear-canvas', handleClearCanvas);
+      socket.off('undo-canvas', handleUndoCanvas);
+      socket.off('redo-canvas', handleRedoCanvas);
+    };
+  }, [socket, ctx]);
+
+  const saveState = useCallback(() => {
+    if (!ctx || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const newState: CanvasState = {
+      imageData,
+      timestamp: Date.now()
+    };
+    
+    setUndoStack(prev => {
+      const newStack = [...prev, newState];
+      // Limit stack size to prevent memory issues
+      return newStack.length > 50 ? newStack.slice(-50) : newStack;
+    });
+    
+    // Clear redo stack when new action is performed
+    setRedoStack([]);
+  }, [ctx]);
+
+  const floodFill = useCallback((startX: number, startY: number, fillColor: string, broadcast = true) => {
+    if (!ctx || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    const startPos = (Math.floor(startY) * canvas.width + Math.floor(startX)) * 4;
+    const startR = data[startPos];
+    const startG = data[startPos + 1];
+    const startB = data[startPos + 2];
+    const startA = data[startPos + 3];
+    
+    // Convert fill color to RGB
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.fillStyle = fillColor;
+    tempCtx.fillRect(0, 0, 1, 1);
+    const fillData = tempCtx.getImageData(0, 0, 1, 1).data;
+    const fillR = fillData[0];
+    const fillG = fillData[1];
+    const fillB = fillData[2];
+    
+    // Don't fill if colors are the same
+    if (startR === fillR && startG === fillG && startB === fillB) return;
+    
+    const stack: [number, number][] = [[Math.floor(startX), Math.floor(startY)]];
+    
+    while (stack.length > 0) {
+      const [currentX, currentY] = stack.pop()!;
+      
+      if (currentX < 0 || currentX >= canvas.width || currentY < 0 || currentY >= canvas.height) continue;
+      
+      const currentPos = (currentY * canvas.width + currentX) * 4;
+      
+      if (data[currentPos] !== startR || data[currentPos + 1] !== startG || 
+          data[currentPos + 2] !== startB || data[currentPos + 3] !== startA) continue;
+      
+      data[currentPos] = fillR;
+      data[currentPos + 1] = fillG;
+      data[currentPos + 2] = fillB;
+      data[currentPos + 3] = 255;
       
       stack.push([currentX + 1, currentY]);
       stack.push([currentX - 1, currentY]);
@@ -29,12 +240,10 @@ index + 3] = 255;
     let clientX, clientY;
     
     if ('touches' in e) {
-      // Touch event
       if (e.touches.length === 0) return { x: 0, y: 0 };
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
     } else {
-      // Mouse event
       clientX = e.clientX;
       clientY = e.clientY;
     }
@@ -59,7 +268,7 @@ index + 3] = 255;
     
     setDrawing(true);
     setLastPoint(point);
-    saveState(); // Save state before starting to draw
+    saveState();
   }, [isDrawing, ctx, tool, getPointerPosition, saveState, floodFill, color]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -68,15 +277,12 @@ index + 3] = 255;
     e.preventDefault();
     const currentPoint = getPointerPosition(e);
     
-    // Draw line
     ctx.beginPath();
     ctx.moveTo(lastPoint.x, lastPoint.y);
     ctx.lineTo(currentPoint.x, currentPoint.y);
     ctx.stroke();
     
-    // Send drawing data to server
     if (socket && roomId) {
-      console.log('🎨 Broadcasting drawing data to other players');
       socket.emit('draw', {
         roomId,
         from: lastPoint,
@@ -99,11 +305,9 @@ index + 3] = 255;
     if (!ctx || !canvasRef.current) return;
     
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
     saveState();
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     if (broadcast && socket && roomId && isDrawing) {
       console.log('🧹 Broadcasting clear canvas to other players');
@@ -111,7 +315,7 @@ index + 3] = 255;
     }
   }, [ctx, saveState, socket, roomId, isDrawing]);
 
-  const undo = useCallback(() => {
+  const performUndo = useCallback((broadcast = true) => {
     if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
     
     console.log('↩️ Performing undo operation');
@@ -124,14 +328,13 @@ index + 3] = 255;
     
     ctx.putImageData(previousState.imageData, 0, 0);
     
-    // Broadcast undo to other players
-    if (socket && roomId && isDrawing) {
+    if (broadcast && socket && roomId && isDrawing) {
       console.log('↩️ Broadcasting undo to other players');
       socket.emit('undo', { roomId });
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
-  const redo = useCallback(() => {
+  const performRedo = useCallback((broadcast = true) => {
     if (!ctx || !canvasRef.current || redoStack.length === 0) return;
     
     console.log('↪️ Performing redo operation');
@@ -143,8 +346,7 @@ index + 3] = 255;
     
     ctx.putImageData(stateToRestore.imageData, 0, 0);
     
-    // Broadcast redo to other players
-    if (socket && roomId && isDrawing) {
+    if (broadcast && socket && roomId && isDrawing) {
       console.log('↪️ Broadcasting redo to other players');
       socket.emit('redo', { roomId });
     }
@@ -186,7 +388,6 @@ index + 3] = 255;
       
       {isDrawing && (
         <div className="flex items-center justify-center space-x-3 pt-3 pb-2 bg-gray-50 rounded-b-lg flex-wrap">
-          {/* Tool Selection */}
           <button
             onClick={() => setTool('brush')}
             className={`p-2 rounded-full transition-colors ${
@@ -217,7 +418,6 @@ index + 3] = 255;
             <PaintBucket size={18} />
           </button>
           
-          {/* Color Picker */}
           <div className="relative">
             <button 
               onClick={() => setShowColorPicker(!showColorPicker)}
@@ -249,7 +449,6 @@ index + 3] = 255;
             )}
           </div>
           
-          {/* Brush Size */}
           {tool !== 'fill' && (
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">Size:</span>
@@ -266,9 +465,8 @@ index + 3] = 255;
             </div>
           )}
           
-          {/* Undo/Redo */}
           <button
-            onClick={undo}
+            onClick={() => performUndo()}
             disabled={undoStack.length <= 1}
             className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
             title="Undo"
@@ -277,7 +475,7 @@ index + 3] = 255;
           </button>
           
           <button
-            onClick={redo}
+            onClick={() => performRedo()}
             disabled={redoStack.length === 0}
             className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
             title="Redo"
@@ -285,7 +483,6 @@ index + 3] = 255;
             <Redo2 size={18} />
           </button>
           
-          {/* Clear Canvas */}
           <button
             onClick={() => clearCanvas()}
             className="p-2 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
