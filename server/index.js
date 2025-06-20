@@ -149,7 +149,7 @@ function startNextTurn(room) {
   
   console.log(`📝 Generated word choices for ${nextDrawer.name}:`, room.gameState.wordChoices);
   
-  // CRITICAL FIX: Update player drawing status BEFORE sending word choices
+  // Update player drawing status
   room.players.forEach(player => {
     player.isDrawing = player.id === nextDrawer.id;
   });
@@ -158,20 +158,12 @@ function startNextTurn(room) {
   const drawerSocket = players.get(nextDrawer.id);
   if (drawerSocket) {
     console.log(`📤 CRITICAL: Sending word choices to drawer ${nextDrawer.name} (${nextDrawer.id}):`, room.gameState.wordChoices);
-    console.log(`📤 CRITICAL: Drawer socket ID: ${drawerSocket.id}`);
-    
-    // Send word choices directly to the drawer
     drawerSocket.emit('word-choices', {
       choices: room.gameState.wordChoices,
       timeLimit: 15 // 15 seconds to choose
     });
-    
-    // ALSO send updated player list to all players so they know who's drawing
-    io.to(room.id).emit('player-joined', { players: room.players });
-    
   } else {
     console.error(`❌ CRITICAL: Drawer socket not found for ${nextDrawer.name} (${nextDrawer.id})`);
-    console.log(`❌ Available player sockets:`, Array.from(players.keys()));
   }
   
   // Notify other players that drawer is choosing
@@ -368,7 +360,6 @@ io.on('connection', (socket) => {
       
       // Store player socket mapping FIRST
       players.set(player.id, socket);
-      console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
       // Create room with host as FIRST player
       const room = createRoom(roomId, settings, player);
@@ -420,7 +411,6 @@ io.on('connection', (socket) => {
       if (existingPlayerIndex !== -1) {
         // Update existing player's socket
         players.set(player.id, socket);
-        console.log(`🔗 CRITICAL: Updated player ${player.name} (${player.id}) with socket ${socket.id}`);
         socket.join(roomId);
         
         console.log(`🔄 Player ${player.name} reconnected to room ${roomId}`);
@@ -455,7 +445,6 @@ io.on('connection', (socket) => {
       
       // Store player socket mapping FIRST
       players.set(player.id, socket);
-      console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
       // Add player to room (host remains at index 0)
       room.players.push(player);

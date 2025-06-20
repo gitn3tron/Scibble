@@ -125,8 +125,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      // CRITICAL FIX: Only the drawing player should receive word choices
-      // This event should ONLY be sent to the drawing player by the server
+      // CRITICAL FIX: Immediately set word choices and clear choosing state
       setGameState(prev => {
         const newState = {
           ...prev,
