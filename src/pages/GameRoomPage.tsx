@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { useSocket } from '../context/SocketContext';
@@ -15,7 +15,10 @@ const GameRoomPage: React.FC = () => {
   const { socket, connected } = useSocket();
   const { player, gameState, joinRoom, startGame, leaveRoom, selectWord } = useGame();
   const [showGameOver, setShowGameOver] = useState(false);
-  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  
+  // CRITICAL FIX: Use refs to prevent duplicate joins
+  const hasJoinedRoom = useRef(false);
+  const hasLeftRoom = useRef(false);
 
   useEffect(() => {
     if (!player) {
@@ -23,20 +26,24 @@ const GameRoomPage: React.FC = () => {
       return;
     }
 
-    // Only join room if we're not already in it and haven't joined yet
-    if (connected && socket && roomId && gameState.roomId !== roomId && !hasJoinedRoom) {
-      console.log('Joining room:', roomId);
+    // CRITICAL FIX: Only join room once when all conditions are met
+    if (connected && socket && roomId && gameState.roomId !== roomId && !hasJoinedRoom.current) {
+      console.log('🚪 CRITICAL: Joining room for the first time:', roomId);
+      hasJoinedRoom.current = true;
       joinRoom(roomId);
-      setHasJoinedRoom(true);
     }
-  }, [connected, socket, roomId, player, gameState.roomId, hasJoinedRoom, joinRoom, navigate]);
+  }, [connected, socket, roomId, player, gameState.roomId, joinRoom, navigate]);
 
-  // Separate cleanup effect that only runs on actual component unmount
+  // CRITICAL FIX: Separate cleanup effect that only runs on actual component unmount
   useEffect(() => {
     return () => {
       // Only leave room if we're actually leaving the page (not just re-rendering)
-      if (gameState.roomId && window.location.pathname !== `/room/${gameState.roomId}`) {
-        console.log('Component unmounting, leaving room');
+      const currentPath = window.location.pathname;
+      const expectedPath = `/room/${gameState.roomId}`;
+      
+      if (gameState.roomId && currentPath !== expectedPath && !hasLeftRoom.current) {
+        console.log('🚪 CRITICAL: Component unmounting, leaving room');
+        hasLeftRoom.current = true;
         leaveRoom();
       }
     };
@@ -55,7 +62,10 @@ const GameRoomPage: React.FC = () => {
   };
 
   const goHome = () => {
-    leaveRoom();
+    if (!hasLeftRoom.current) {
+      hasLeftRoom.current = true;
+      leaveRoom();
+    }
     navigate('/');
   };
 
@@ -132,6 +142,7 @@ const GameRoomPage: React.FC = () => {
   // CRITICAL DEBUG LOGGING - This will show us exactly what's happening
   console.log('🔍 CRITICAL GameRoomPage Debug State:', {
     playerId: player?.id,
+    playerName: player?.name,
     isDrawing,
     wordChoices: gameState.wordChoices,
     wordChoicesLength: gameState.wordChoices?.length || 0,
@@ -155,6 +166,9 @@ const GameRoomPage: React.FC = () => {
   if (gameState.isPlaying && isDrawing && gameState.wordChoices && gameState.wordChoices.length > 0) {
     console.log('✅ CRITICAL: Showing word selection modal for drawing player');
     console.log('✅ CRITICAL: Word choices to display:', gameState.wordChoices);
+    console.log('✅ CRITICAL: Player name:', player?.name);
+    console.log('✅ CRITICAL: Time left:', gameState.timeLeft);
+    
     return (
       <>
         <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
@@ -175,6 +189,9 @@ const GameRoomPage: React.FC = () => {
   // Show waiting screen for non-drawing players when someone is choosing word
   if (gameState.isPlaying && gameState.isChoosingWord && !isDrawing && gameState.drawingPlayerName) {
     console.log('✅ Showing waiting screen for non-drawing player');
+    console.log('✅ Drawing player name:', gameState.drawingPlayerName);
+    console.log('✅ Current player name:', player?.name);
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 text-white flex items-center justify-center">
         <div className="text-center">

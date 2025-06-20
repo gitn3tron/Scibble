@@ -122,11 +122,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
       console.log('📝 CRITICAL: Received word-choices event:', data);
       console.log('📝 CRITICAL: Current player ID:', player?.id);
+      console.log('📝 CRITICAL: Current player name:', player?.name);
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
       // CRITICAL FIX: This event should ONLY be received by the drawing player
-      // Set word choices immediately and clear choosing state for the drawing player
+      // Set word choices immediately for the drawing player
       setGameState(prev => {
         const newState = {
           ...prev,
@@ -138,7 +139,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           wordChoices: newState.wordChoices,
           wordChoicesLength: newState.wordChoices.length,
           timeLeft: newState.timeLeft,
-          isChoosingWord: newState.isChoosingWord
+          isChoosingWord: newState.isChoosingWord,
+          playerName: player?.name,
+          playerId: player?.id
         });
         return newState;
       });
@@ -150,6 +153,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timeLeft: number
     }) => {
       console.log('⏳ Received drawer-choosing event:', data);
+      console.log('⏳ Current player name:', player?.name);
+      console.log('⏳ Drawing player name:', data.drawingPlayerName);
+      
       // This event is for NON-drawing players to show waiting screen
       setGameState(prev => ({
         ...prev,
@@ -172,6 +178,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalTurns: number
     }) => {
       console.log('🎯 Received turn-started event:', data);
+      console.log('🎯 Current player ID:', player?.id);
+      console.log('🎯 Drawing player ID:', data.drawingPlayerId);
+      
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
@@ -298,7 +307,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const joinRoom = (roomId: string) => {
-    console.log('🚪 joinRoom called with:', { player, roomId });
+    console.log('🚪 CRITICAL: joinRoom called with:', { player, roomId });
     
     if (!socket) {
       console.error('❌ No socket connection for joinRoom');
@@ -310,10 +319,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    console.log('📤 Emitting join-room event to server...');
+    console.log('📤 CRITICAL: Emitting join-room event to server...');
     socket.emit('join-room', { player, roomId });
     setGameState(prev => ({ ...prev, roomId }));
-    console.log('✅ join-room event emitted successfully');
+    console.log('✅ CRITICAL: join-room event emitted successfully');
   };
 
   const startGame = () => {
@@ -337,6 +346,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const selectWord = (word: string) => {
     console.log('📝 CRITICAL: selectWord called with word:', word);
     console.log('📝 CRITICAL: Current gameState.wordChoices:', gameState.wordChoices);
+    console.log('📝 CRITICAL: Current player:', player?.name);
     
     if (!socket || !gameState.roomId) {
       console.error('❌ No socket connection or roomId for selectWord');
@@ -368,13 +378,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const leaveRoom = () => {
-    console.log('🚪 leaveRoom called');
+    console.log('🚪 CRITICAL: leaveRoom called');
     
     if (socket && player && gameState.roomId) {
-      console.log('📤 Emitting leave-room event to server...');
+      console.log('📤 CRITICAL: Emitting leave-room event to server...');
       socket.emit('leave-room', { roomId: gameState.roomId, playerId: player.id });
       setGameState(initialGameState);
-      console.log('✅ leave-room event emitted successfully');
+      console.log('✅ CRITICAL: leave-room event emitted successfully');
     }
   };
 
