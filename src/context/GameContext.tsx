@@ -125,11 +125,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      // CRITICAL FIX: Immediately set word choices and clear choosing state
+      // CRITICAL FIX: This event should ONLY be received by the drawing player
+      // Set word choices immediately and clear choosing state for the drawing player
       setGameState(prev => {
         const newState = {
           ...prev,
-          wordChoices: data.choices, // CRITICAL: Set the word choices array
+          wordChoices: data.choices, // Set the word choices for the drawing player
           timeLeft: data.timeLimit,
           isChoosingWord: false // Drawing player gets the modal, not the waiting state
         };
@@ -149,6 +150,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timeLeft: number
     }) => {
       console.log('⏳ Received drawer-choosing event:', data);
+      // This event is for NON-drawing players to show waiting screen
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
@@ -189,7 +191,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('time-update', (data: { timeLeft: number }) => {
-      // CRITICAL FIX: Always update time, including during word selection
+      // Always update time, including during word selection
       console.log('⏰ Time update received:', data.timeLeft);
       setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
     });
@@ -345,7 +347,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
     console.log('✅ CRITICAL: word-selected event emitted successfully');
     
-    // CRITICAL: Clear word choices immediately after selection to hide modal
+    // Clear word choices immediately after selection to hide modal
     setGameState(prev => ({
       ...prev,
       wordChoices: [], // This will hide the modal immediately

@@ -27,7 +27,8 @@ const io = new Server(httpServer, {
 
 // Game state storage
 const rooms = new Map();
-const players = new Map();
+// CRITICAL FIX: Store socket references by player ID for reliable lookup
+const playerSockets = new Map(); // playerId -> socket
 
 // Default word list
 const defaultWords = [
@@ -142,35 +143,47 @@ function startNextTurn(room) {
   // Add to players who have drawn this round
   room.gameState.playersWhoHaveDrawnThisRound.push(nextDrawer.id);
   
-  console.log(`🎨 Turn started: ${nextDrawer.name} is drawing (${room.gameState.playersWhoHaveDrawnThisRound.length}/${room.gameState.totalDrawersNeeded})`);
+  console.log(`🎨 Turn started: ${nextDrawer.name} (ID: ${nextDrawer.id}) is drawing (${room.gameState.playersWhoHaveDrawnThisRound.length}/${room.gameState.totalDrawersNeeded})`);
   
   // Generate word choices for the drawer
   room.gameState.wordChoices = getRandomWords(room.gameState.wordList, room.settings.wordCount);
   
   console.log(`📝 Generated word choices for ${nextDrawer.name}:`, room.gameState.wordChoices);
   
-  // Update player drawing status
+  // CRITICAL FIX: Update player drawing status BEFORE sending events
   room.players.forEach(player => {
     player.isDrawing = player.id === nextDrawer.id;
   });
   
-  // CRITICAL FIX: Send word choices to the specific drawer socket
-  const drawerSocket = players.get(nextDrawer.id);
-  if (drawerSocket) {
-    console.log(`📤 CRITICAL: Sending word choices to drawer ${nextDrawer.name} (${nextDrawer.id}):`, room.gameState.wordChoices);
+  // CRITICAL FIX: Send updated player list to ALL players first
+  io.to(room.id).emit('player-joined', { players: room.players });
+  
+  // CRITICAL FIX: Get the correct socket for the drawing player
+  const drawerSocket = playerSockets.get(nextDrawer.id);
+  
+  if (drawerSocket && drawerSocket.connected) {
+    console.log(`📤 CRITICAL: Sending word choices to drawer ${nextDrawer.name} (${nextDrawer.id})`);
+    console.log(`📤 CRITICAL: Drawer socket ID: ${drawerSocket.id}, Connected: ${drawerSocket.connected}`);
+    
+    // Send word choices ONLY to the drawing player
     drawerSocket.emit('word-choices', {
       choices: room.gameState.wordChoices,
-      timeLimit: 15 // 15 seconds to choose
+      timeLimit: 15
     });
+    
+    console.log(`✅ CRITICAL: Word choices sent successfully to ${nextDrawer.name}`);
+    
   } else {
-    console.error(`❌ CRITICAL: Drawer socket not found for ${nextDrawer.name} (${nextDrawer.id})`);
+    console.error(`❌ CRITICAL: Drawer socket not found or disconnected for ${nextDrawer.name} (${nextDrawer.id})`);
+    console.log(`❌ Available player sockets:`, Array.from(playerSockets.keys()));
+    console.log(`❌ Room players:`, room.players.map(p => ({ id: p.id, name: p.name })));
   }
   
-  // Notify other players that drawer is choosing
+  // Notify OTHER players that drawer is choosing (exclude the drawer)
   room.players.forEach(player => {
     if (player.id !== nextDrawer.id) {
-      const socket = players.get(player.id);
-      if (socket) {
+      const socket = playerSockets.get(player.id);
+      if (socket && socket.connected) {
         console.log(`📤 Notifying ${player.name} that ${nextDrawer.name} is choosing word`);
         socket.emit('drawer-choosing', {
           currentRound: room.gameState.currentRound,
@@ -222,8 +235,8 @@ function selectWord(room, selectedWord) {
   
   // Notify all players about turn start
   room.players.forEach(player => {
-    const socket = players.get(player.id);
-    if (socket) {
+    const socket = playerSockets.get(player.id);
+    if (socket && socket.connected) {
       socket.emit('turn-started', {
         currentRound: room.gameState.currentRound,
         timeLeft: room.gameState.timeLeft,
@@ -358,8 +371,9 @@ io.on('connection', (socket) => {
       player.score = 0;
       player.isDrawing = false;
       
-      // Store player socket mapping FIRST
-      players.set(player.id, socket);
+      // CRITICAL FIX: Store player socket mapping FIRST
+      playerSockets.set(player.id, socket);
+      console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
       // Create room with host as FIRST player
       const room = createRoom(roomId, settings, player);
@@ -409,8 +423,9 @@ io.on('connection', (socket) => {
       // Check if player is already in room (reconnection)
       const existingPlayerIndex = room.players.findIndex(p => p.id === player.id);
       if (existingPlayerIndex !== -1) {
-        // Update existing player's socket
-        players.set(player.id, socket);
+        // CRITICAL FIX: Update existing player's socket mapping
+        playerSockets.set(player.id, socket);
+        console.log(`🔗 CRITICAL: Updated player ${player.name} (${player.id}) with socket ${socket.id}`);
         socket.join(roomId);
         
         console.log(`🔄 Player ${player.name} reconnected to room ${roomId}`);
@@ -432,7 +447,7 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // FIXED: Check room capacity AFTER checking for existing player
+      // Check room capacity AFTER checking for existing player
       if (room.players.length >= room.settings.totalPlayers) {
         console.log(`❌ Room ${roomId} is full`);
         socket.emit('error', { message: 'Room is full' });
@@ -443,8 +458,9 @@ io.on('connection', (socket) => {
       player.score = 0;
       player.isDrawing = false;
       
-      // Store player socket mapping FIRST
-      players.set(player.id, socket);
+      // CRITICAL FIX: Store player socket mapping FIRST
+      playerSockets.set(player.id, socket);
+      console.log(`🔗 CRITICAL: Stored player ${player.name} (${player.id}) with socket ${socket.id}`);
       
       // Add player to room (host remains at index 0)
       room.players.push(player);
@@ -488,8 +504,8 @@ io.on('connection', (socket) => {
       }
       
       // Check if the player starting the game is the host (first player)
-      const playerSocket = players.get(room.players[0].id);
-      if (playerSocket?.id !== socket.id) {
+      const hostSocket = playerSockets.get(room.players[0].id);
+      if (hostSocket?.id !== socket.id) {
         socket.emit('error', { message: 'Only the host can start the game' });
         return;
       }
@@ -622,7 +638,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId, from, to, color, brushSize, tool } = data;
       
-      // CRITICAL FIX: Broadcast drawing data to ALL other players in the room
+      // Broadcast drawing data to ALL other players in the room
       socket.to(roomId).emit('drawing-data', {
         from,
         to,
@@ -640,7 +656,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // CRITICAL FIX: Broadcast clear canvas to ALL other players in the room
+      // Broadcast clear canvas to ALL other players in the room
       socket.to(roomId).emit('clear-canvas');
       
     } catch (error) {
@@ -652,7 +668,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // CRITICAL FIX: Broadcast undo to ALL other players in the room
+      // Broadcast undo to ALL other players in the room
       socket.to(roomId).emit('undo-canvas');
       
     } catch (error) {
@@ -664,7 +680,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       
-      // CRITICAL FIX: Broadcast redo to ALL other players in the room
+      // Broadcast redo to ALL other players in the room
       socket.to(roomId).emit('redo-canvas');
       
     } catch (error) {
@@ -683,9 +699,9 @@ io.on('connection', (socket) => {
       
       const leavingPlayerName = room.players.find(p => p.id === playerId)?.name || 'A player';
       
-      // Remove player from room
+      // Remove player from room and socket mapping
       room.players = room.players.filter(p => p.id !== playerId);
-      players.delete(playerId);
+      playerSockets.delete(playerId);
       
       // Leave socket room
       socket.leave(roomId);
@@ -725,7 +741,7 @@ io.on('connection', (socket) => {
     console.log(`🔌 User disconnected: ${socket.id}`);
     
     // Find and remove player from any rooms
-    for (const [playerId, playerSocket] of players.entries()) {
+    for (const [playerId, playerSocket] of playerSockets.entries()) {
       if (playerSocket.id === socket.id) {
         // Find room containing this player
         for (const [roomId, room] of rooms.entries()) {
@@ -735,7 +751,7 @@ io.on('connection', (socket) => {
             
             // Remove player
             room.players.splice(playerIndex, 1);
-            players.delete(playerId);
+            playerSockets.delete(playerId);
             
             // Clean up empty room
             if (room.players.length === 0) {
@@ -775,7 +791,7 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Server stats: Rooms: ${rooms.size}, Players: ${players.size}`);
+  console.log(`📊 Server stats: Rooms: ${rooms.size}, Players: ${playerSockets.size}`);
 }).on('error', (error) => {
   console.error('❌ Server failed to start:', error);
 });
