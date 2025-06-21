@@ -151,6 +151,7 @@ const GameRoomPage: React.FC = () => {
     timeLeft: gameState.timeLeft,
     isPlaying: gameState.isPlaying,
     currentRound: gameState.currentRound,
+    currentWord: gameState.currentWord,
     // Show the exact condition values
     conditionCheck: {
       gameStateIsPlaying: gameState.isPlaying,
@@ -398,6 +399,8 @@ const GameRoomPage: React.FC = () => {
             <DrawingCanvas 
               isDrawing={isDrawing || false} 
               roomId={gameState.roomId || ''} 
+              gameStarted={gameState.isPlaying}
+              currentWord={gameState.currentWord}
             />
           </div>
         </div>

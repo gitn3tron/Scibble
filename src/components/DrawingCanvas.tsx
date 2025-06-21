@@ -15,9 +15,11 @@ interface CanvasState {
 interface DrawingCanvasProps {
   isDrawing: boolean;
   roomId: string;
+  gameStarted: boolean;
+  currentWord: string;
 }
 
-const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
+const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameStarted, currentWord }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { socket } = useSocket();
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
@@ -357,6 +359,47 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
     '#FF00FF', '#00FFFF', '#FF9900', '#9900FF', '#99FF00', '#FF0099'
   ];
 
+  // Show appropriate overlay based on game state
+  const renderOverlay = () => {
+    if (!gameStarted) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+          <div className="text-center">
+            <p className="text-gray-600 font-medium">
+              Waiting for the game to start...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!isDrawing && !currentWord) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+          <div className="text-center">
+            <p className="text-gray-600 font-medium">
+              Someone is choosing a word...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!isDrawing && currentWord) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+          <div className="text-center">
+            <p className="text-gray-600 font-medium">
+              Watch and guess the drawing!
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       <div className="relative flex-grow border border-gray-300 bg-white rounded-lg overflow-hidden">
@@ -375,15 +418,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId }) => {
           style={{ touchAction: 'none' }}
         />
         
-        {!isDrawing && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
-            <div className="text-center">
-              <p className="text-gray-600 font-medium">
-                {drawing ? "Someone is drawing..." : "Waiting for drawer..."}
-              </p>
-            </div>
-          </div>
-        )}
+        {renderOverlay()}
       </div>
       
       {isDrawing && (

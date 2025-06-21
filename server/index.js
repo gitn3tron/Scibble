@@ -557,8 +557,17 @@ io.on('connection', (socket) => {
       const { roomId, selectedWord } = data;
       const room = rooms.get(roomId);
       
-      if (!room || !room.gameState.wordChoices.includes(selectedWord)) {
-        console.log('❌ Invalid word selection');
+      if (!room) {
+        console.log('❌ Room not found for word selection');
+        return;
+      }
+      
+      // FIXED: Check if the selected word is in the current word choices
+      if (!room.gameState.wordChoices.includes(selectedWord)) {
+        console.log('❌ Invalid word selection - word not in choices:', {
+          selectedWord,
+          availableChoices: room.gameState.wordChoices
+        });
         return;
       }
       

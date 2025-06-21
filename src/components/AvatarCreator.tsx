@@ -185,36 +185,36 @@ const AvatarCreator: React.FC<AvatarProps> = ({ avatar, setAvatar }) => {
   const renderAccessory = () => {
     if (avatar.accessory === 'none') return null;
     
-    const baseStyle = "absolute text-lg";
+    const baseStyle = "absolute flex items-center justify-center";
     
     switch (avatar.accessory) {
       case 'glasses':
         return (
-          <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
+          <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2 text-2xl`}>
             👓
           </div>
         );
       case 'sunglasses':
         return (
-          <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
+          <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2 text-2xl`}>
             🕶️
           </div>
         );
       case 'hat':
         return (
-          <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
+          <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/3 text-3xl`}>
             🎩
           </div>
         );
       case 'crown':
         return (
-          <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
+          <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/3 text-3xl`}>
             👑
           </div>
         );
       case 'headband':
         return (
-          <div className={`${baseStyle} left-1/2 top-1/4 transform -translate-x-1/2 -translate-y-1/2`}>
+          <div className={`${baseStyle} left-1/2 top-1/6 transform -translate-x-1/2 -translate-y-1/2 text-2xl`}>
             🎀
           </div>
         );
