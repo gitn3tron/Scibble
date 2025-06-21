@@ -8,6 +8,8 @@ interface Player {
     eyes: string;
     mouth: string;
     color: string;
+    accessory: string;
+    eyebrows: string;
   };
   score: number;
   isDrawing: boolean;
@@ -122,23 +124,24 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('word-choices', (data: { choices: string[], timeLimit: number }) => {
       console.log('📝 CRITICAL: Received word-choices event:', data);
       console.log('📝 CRITICAL: Current player ID:', player?.id);
+      console.log('📝 CRITICAL: Current player name:', player?.name);
       console.log('📝 CRITICAL: Word choices received:', data.choices);
       console.log('📝 CRITICAL: Time limit:', data.timeLimit);
       
-      // CRITICAL FIX: This event should ONLY be received by the drawing player
-      // Set word choices immediately and clear choosing state for the drawing player
       setGameState(prev => {
         const newState = {
           ...prev,
-          wordChoices: data.choices, // Set the word choices for the drawing player
+          wordChoices: data.choices,
           timeLeft: data.timeLimit,
-          isChoosingWord: false // Drawing player gets the modal, not the waiting state
+          isChoosingWord: false
         };
         console.log('📝 CRITICAL: New state after word-choices:', {
           wordChoices: newState.wordChoices,
           wordChoicesLength: newState.wordChoices.length,
           timeLeft: newState.timeLeft,
-          isChoosingWord: newState.isChoosingWord
+          isChoosingWord: newState.isChoosingWord,
+          playerName: player?.name,
+          playerId: player?.id
         });
         return newState;
       });
@@ -150,14 +153,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timeLeft: number
     }) => {
       console.log('⏳ Received drawer-choosing event:', data);
-      // This event is for NON-drawing players to show waiting screen
+      console.log('⏳ Current player name:', player?.name);
+      console.log('⏳ Drawing player name:', data.drawingPlayerName);
+      
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
         drawingPlayerName: data.drawingPlayerName,
         timeLeft: data.timeLeft,
-        isChoosingWord: true, // Set to true for waiting players
-        wordChoices: [] // Clear word choices for non-drawing players
+        isChoosingWord: true,
+        wordChoices: []
       }));
     });
 
@@ -172,6 +177,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalTurns: number
     }) => {
       console.log('🎯 Received turn-started event:', data);
+      console.log('🎯 Current player ID:', player?.id);
+      console.log('🎯 Drawing player ID:', data.drawingPlayerId);
+      
       setGameState(prev => ({
         ...prev,
         currentRound: data.currentRound,
@@ -180,8 +188,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drawingPlayerName: data.drawingPlayerName,
         turnNumber: data.turnNumber,
         totalTurns: data.totalTurns,
-        isChoosingWord: false, // Clear choosing state when turn actually starts
-        wordChoices: [], // Clear word choices when turn starts
+        isChoosingWord: false,
+        wordChoices: [],
         players: prev.players.map(p => ({
           ...p,
           isDrawing: p.id === data.drawingPlayerId
@@ -191,7 +199,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('time-update', (data: { timeLeft: number }) => {
-      // Always update time, including during word selection
       console.log('⏰ Time update received:', data.timeLeft);
       setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
     });
@@ -230,8 +237,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })),
         currentWord: '',
         revealedWord: data.correctWord,
-        wordChoices: [], // Clear word choices when turn ends
-        isChoosingWord: false // Clear choosing state when turn ends
+        wordChoices: [],
+        isChoosingWord: false
       }));
     });
 
@@ -245,12 +252,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           score: data.finalScores[p.id] || p.score,
           isDrawing: false
         })),
-        wordChoices: [], // Clear word choices when game ends
-        isChoosingWord: false // Clear choosing state when game ends
+        wordChoices: [],
+        isChoosingWord: false
       }));
     });
 
-    // Add error event listener
     socket.on('error', (error: any) => {
       console.error('❌ Socket error:', error);
       alert(error.message || 'An error occurred');
@@ -298,7 +304,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const joinRoom = (roomId: string) => {
-    console.log('🚪 joinRoom called with:', { player, roomId });
+    console.log('🚪 CRITICAL: joinRoom called with:', { player, roomId });
     
     if (!socket) {
       console.error('❌ No socket connection for joinRoom');
@@ -310,10 +316,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    console.log('📤 Emitting join-room event to server...');
+    console.log('📤 CRITICAL: Emitting join-room event to server...');
     socket.emit('join-room', { player, roomId });
     setGameState(prev => ({ ...prev, roomId }));
-    console.log('✅ join-room event emitted successfully');
+    console.log('✅ CRITICAL: join-room event emitted successfully');
   };
 
   const startGame = () => {
@@ -337,6 +343,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const selectWord = (word: string) => {
     console.log('📝 CRITICAL: selectWord called with word:', word);
     console.log('📝 CRITICAL: Current gameState.wordChoices:', gameState.wordChoices);
+    console.log('📝 CRITICAL: Current player:', player?.name);
     
     if (!socket || !gameState.roomId) {
       console.error('❌ No socket connection or roomId for selectWord');
@@ -347,10 +354,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.emit('word-selected', { roomId: gameState.roomId, selectedWord: word });
     console.log('✅ CRITICAL: word-selected event emitted successfully');
     
-    // Clear word choices immediately after selection to hide modal
     setGameState(prev => ({
       ...prev,
-      wordChoices: [], // This will hide the modal immediately
+      wordChoices: [],
       isChoosingWord: false
     }));
   };
@@ -368,13 +374,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const leaveRoom = () => {
-    console.log('🚪 leaveRoom called');
+    console.log('🚪 CRITICAL: leaveRoom called');
     
     if (socket && player && gameState.roomId) {
-      console.log('📤 Emitting leave-room event to server...');
+      console.log('📤 CRITICAL: Emitting leave-room event to server...');
       socket.emit('leave-room', { roomId: gameState.roomId, playerId: player.id });
       setGameState(initialGameState);
-      console.log('✅ leave-room event emitted successfully');
+      console.log('✅ CRITICAL: leave-room event emitted successfully');
     }
   };
 
