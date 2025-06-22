@@ -363,9 +363,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
   const renderOverlay = () => {
     if (!gameStarted) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
           <div className="text-center">
-            <p className="text-gray-600 font-medium">
+            <p className="text-gray-600 font-medium text-lg">
               Waiting for the game to start...
             </p>
           </div>
@@ -375,9 +375,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
 
     if (!isDrawing && !currentWord) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
           <div className="text-center">
-            <p className="text-gray-600 font-medium">
+            <p className="text-gray-600 font-medium text-lg">
               Someone is choosing a word...
             </p>
           </div>
@@ -387,9 +387,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
 
     if (!isDrawing && currentWord) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-5 pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
           <div className="text-center">
-            <p className="text-gray-600 font-medium">
+            <p className="text-gray-600 font-medium text-lg">
               Watch and guess the drawing!
             </p>
           </div>
