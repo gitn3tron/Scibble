@@ -26,13 +26,118 @@ const io = new Server(httpServer, {
 const rooms = new Map();
 const playerSockets = new Map();
 
-// Default word list
+// Expanded word list with hundreds of drawable words
 const defaultWords = [
-  'apple', 'banana', 'car', 'dog', 'elephant', 'flower', 'guitar', 'house', 'igloo', 'jacket',
-  'kite', 'lion', 'mountain', 'notebook', 'ocean', 'pizza', 'queen', 'rainbow', 'sun', 'tree',
-  'umbrella', 'violin', 'whale', 'xylophone', 'yacht', 'zebra', 'airplane', 'butterfly', 'castle', 'diamond',
-  'eagle', 'fire', 'garden', 'hammer', 'island', 'jungle', 'keyboard', 'lighthouse', 'mirror', 'nest',
-  'orange', 'penguin', 'quilt', 'robot', 'sandwich', 'telescope', 'unicorn', 'volcano', 'waterfall', 'x-ray'
+  // Animals
+  'cat', 'dog', 'elephant', 'lion', 'tiger', 'bear', 'wolf', 'fox', 'rabbit', 'mouse',
+  'horse', 'cow', 'pig', 'sheep', 'goat', 'chicken', 'duck', 'goose', 'turkey', 'peacock',
+  'eagle', 'hawk', 'owl', 'parrot', 'penguin', 'flamingo', 'swan', 'crane', 'pelican', 'toucan',
+  'fish', 'shark', 'whale', 'dolphin', 'octopus', 'jellyfish', 'starfish', 'crab', 'lobster', 'seahorse',
+  'butterfly', 'bee', 'ant', 'spider', 'ladybug', 'dragonfly', 'grasshopper', 'cricket', 'beetle', 'moth',
+  'snake', 'lizard', 'turtle', 'frog', 'crocodile', 'alligator', 'iguana', 'chameleon', 'gecko', 'salamander',
+  'monkey', 'gorilla', 'chimpanzee', 'orangutan', 'baboon', 'lemur', 'koala', 'panda', 'kangaroo', 'zebra',
+  'giraffe', 'hippopotamus', 'rhinoceros', 'camel', 'llama', 'deer', 'moose', 'elk', 'antelope', 'buffalo',
+  
+  // Food & Drinks
+  'apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 'raspberry', 'blackberry', 'cherry', 'peach',
+  'pear', 'plum', 'apricot', 'mango', 'pineapple', 'watermelon', 'cantaloupe', 'honeydew', 'kiwi', 'coconut',
+  'lemon', 'lime', 'grapefruit', 'avocado', 'tomato', 'cucumber', 'carrot', 'potato', 'onion', 'garlic',
+  'broccoli', 'cauliflower', 'cabbage', 'lettuce', 'spinach', 'celery', 'asparagus', 'corn', 'peas', 'beans',
+  'pepper', 'chili', 'eggplant', 'zucchini', 'squash', 'pumpkin', 'mushroom', 'radish', 'turnip', 'beet',
+  'bread', 'cake', 'cookie', 'pie', 'donut', 'muffin', 'bagel', 'croissant', 'pretzel', 'waffle',
+  'pancake', 'toast', 'sandwich', 'burger', 'pizza', 'pasta', 'noodles', 'rice', 'soup', 'salad',
+  'cheese', 'milk', 'butter', 'yogurt', 'ice cream', 'chocolate', 'candy', 'lollipop', 'gum', 'popcorn',
+  'coffee', 'tea', 'juice', 'soda', 'water', 'wine', 'beer', 'cocktail', 'smoothie', 'milkshake',
+  
+  // Objects & Tools
+  'hammer', 'screwdriver', 'wrench', 'saw', 'drill', 'nail', 'screw', 'bolt', 'nut', 'pliers',
+  'scissors', 'knife', 'fork', 'spoon', 'plate', 'bowl', 'cup', 'glass', 'bottle', 'jar',
+  'pen', 'pencil', 'marker', 'crayon', 'brush', 'eraser', 'ruler', 'calculator', 'computer', 'phone',
+  'television', 'radio', 'camera', 'microphone', 'speaker', 'headphones', 'keyboard', 'mouse', 'monitor', 'printer',
+  'book', 'newspaper', 'magazine', 'letter', 'envelope', 'stamp', 'package', 'box', 'bag', 'suitcase',
+  'clock', 'watch', 'calendar', 'mirror', 'lamp', 'candle', 'flashlight', 'battery', 'key', 'lock',
+  'door', 'window', 'chair', 'table', 'bed', 'sofa', 'desk', 'shelf', 'cabinet', 'drawer',
+  'refrigerator', 'stove', 'oven', 'microwave', 'toaster', 'blender', 'mixer', 'dishwasher', 'washing machine', 'dryer',
+  
+  // Transportation
+  'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'scooter', 'skateboard', 'roller skates', 'train', 'subway',
+  'airplane', 'helicopter', 'rocket', 'spaceship', 'boat', 'ship', 'yacht', 'sailboat', 'canoe', 'kayak',
+  'taxi', 'ambulance', 'fire truck', 'police car', 'school bus', 'van', 'limousine', 'convertible', 'pickup truck', 'trailer',
+  
+  // Nature & Weather
+  'sun', 'moon', 'star', 'cloud', 'rain', 'snow', 'lightning', 'thunder', 'rainbow', 'wind',
+  'tree', 'flower', 'grass', 'leaf', 'branch', 'root', 'seed', 'fruit', 'vegetable', 'garden',
+  'mountain', 'hill', 'valley', 'river', 'lake', 'ocean', 'beach', 'island', 'desert', 'forest',
+  'rock', 'stone', 'sand', 'dirt', 'mud', 'ice', 'fire', 'smoke', 'flame', 'ash',
+  'rose', 'tulip', 'daisy', 'sunflower', 'lily', 'orchid', 'carnation', 'daffodil', 'iris', 'violet',
+  
+  // Sports & Activities
+  'football', 'basketball', 'baseball', 'soccer', 'tennis', 'golf', 'hockey', 'volleyball', 'bowling', 'swimming',
+  'running', 'jumping', 'dancing', 'singing', 'painting', 'drawing', 'reading', 'writing', 'cooking', 'baking',
+  'fishing', 'hunting', 'camping', 'hiking', 'climbing', 'skiing', 'snowboarding', 'surfing', 'sailing', 'diving',
+  'yoga', 'meditation', 'exercise', 'weightlifting', 'cycling', 'jogging', 'walking', 'stretching', 'boxing', 'wrestling',
+  
+  // Clothing & Accessories
+  'shirt', 'pants', 'dress', 'skirt', 'shorts', 'jacket', 'coat', 'sweater', 'hoodie', 'vest',
+  'hat', 'cap', 'helmet', 'crown', 'tiara', 'headband', 'scarf', 'tie', 'bow tie', 'belt',
+  'shoes', 'boots', 'sandals', 'slippers', 'sneakers', 'heels', 'socks', 'stockings', 'gloves', 'mittens',
+  'ring', 'necklace', 'bracelet', 'earrings', 'watch', 'glasses', 'sunglasses', 'purse', 'wallet', 'backpack',
+  
+  // Musical Instruments
+  'piano', 'guitar', 'violin', 'drums', 'trumpet', 'saxophone', 'flute', 'clarinet', 'trombone', 'harp',
+  'banjo', 'ukulele', 'harmonica', 'accordion', 'xylophone', 'tambourine', 'triangle', 'cymbals', 'bell', 'whistle',
+  
+  // Buildings & Places
+  'house', 'apartment', 'castle', 'palace', 'mansion', 'cabin', 'tent', 'igloo', 'barn', 'garage',
+  'school', 'hospital', 'library', 'museum', 'theater', 'cinema', 'restaurant', 'cafe', 'store', 'mall',
+  'bank', 'post office', 'police station', 'fire station', 'airport', 'train station', 'bus stop', 'park', 'playground', 'zoo',
+  'church', 'temple', 'mosque', 'synagogue', 'cathedral', 'tower', 'bridge', 'tunnel', 'road', 'street',
+  
+  // Body Parts
+  'head', 'face', 'eye', 'nose', 'mouth', 'ear', 'hair', 'neck', 'shoulder', 'arm',
+  'hand', 'finger', 'thumb', 'wrist', 'elbow', 'chest', 'back', 'stomach', 'waist', 'hip',
+  'leg', 'knee', 'ankle', 'foot', 'toe', 'heel', 'brain', 'heart', 'lung', 'liver',
+  
+  // Emotions & Actions
+  'happy', 'sad', 'angry', 'excited', 'surprised', 'scared', 'tired', 'sleepy', 'hungry', 'thirsty',
+  'laughing', 'crying', 'smiling', 'frowning', 'winking', 'thinking', 'dreaming', 'sleeping', 'waking up', 'yawning',
+  'hugging', 'kissing', 'waving', 'pointing', 'clapping', 'thumbs up', 'peace sign', 'high five', 'handshake', 'salute',
+  
+  // Shapes & Colors
+  'circle', 'square', 'triangle', 'rectangle', 'oval', 'diamond', 'heart', 'star', 'cross', 'arrow',
+  'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'black', 'white',
+  'gray', 'silver', 'gold', 'bronze', 'copper', 'turquoise', 'magenta', 'cyan', 'maroon', 'navy',
+  
+  // Fantasy & Mythology
+  'dragon', 'unicorn', 'fairy', 'wizard', 'witch', 'ghost', 'vampire', 'werewolf', 'zombie', 'monster',
+  'angel', 'devil', 'genie', 'mermaid', 'centaur', 'phoenix', 'griffin', 'pegasus', 'troll', 'goblin',
+  
+  // Space & Science
+  'planet', 'asteroid', 'comet', 'galaxy', 'nebula', 'black hole', 'satellite', 'telescope', 'microscope', 'laboratory',
+  'atom', 'molecule', 'crystal', 'magnet', 'battery', 'circuit', 'robot', 'android', 'cyborg', 'alien',
+  
+  // Holidays & Celebrations
+  'birthday', 'wedding', 'graduation', 'anniversary', 'party', 'festival', 'carnival', 'parade', 'fireworks', 'balloon',
+  'gift', 'present', 'ribbon', 'bow', 'card', 'invitation', 'decoration', 'confetti', 'streamer', 'banner',
+  
+  // Games & Toys
+  'ball', 'doll', 'teddy bear', 'puzzle', 'blocks', 'lego', 'yo-yo', 'kite', 'frisbee', 'boomerang',
+  'chess', 'checkers', 'cards', 'dice', 'domino', 'marbles', 'spinning top', 'slinky', 'rubik cube', 'jigsaw',
+  
+  // Professions
+  'doctor', 'nurse', 'teacher', 'student', 'chef', 'waiter', 'pilot', 'driver', 'mechanic', 'electrician',
+  'plumber', 'carpenter', 'painter', 'artist', 'musician', 'singer', 'dancer', 'actor', 'director', 'writer',
+  'lawyer', 'judge', 'police officer', 'firefighter', 'soldier', 'sailor', 'farmer', 'gardener', 'baker', 'barber',
+  
+  // Technology
+  'internet', 'website', 'email', 'password', 'download', 'upload', 'wifi', 'bluetooth', 'usb', 'charger',
+  'tablet', 'smartphone', 'laptop', 'desktop', 'server', 'database', 'software', 'app', 'game', 'virtual reality',
+  
+  // Miscellaneous
+  'magic', 'spell', 'potion', 'treasure', 'map', 'compass', 'adventure', 'journey', 'quest', 'mission',
+  'secret', 'mystery', 'clue', 'riddle', 'puzzle', 'code', 'symbol', 'sign', 'signal', 'message',
+  'story', 'tale', 'legend', 'myth', 'fable', 'poem', 'song', 'melody', 'rhythm', 'beat',
+  'pattern', 'design', 'style', 'fashion', 'trend', 'culture', 'tradition', 'custom', 'habit', 'routine'
 ];
 
 // Enhanced scoring system
@@ -827,6 +932,7 @@ const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Server stats: Rooms: ${rooms.size}, Players: ${playerSockets.size}`);
+  console.log(`📚 Word list loaded with ${defaultWords.length} words`);
 }).on('error', (error) => {
   console.error('❌ Server failed to start:', error);
 });
