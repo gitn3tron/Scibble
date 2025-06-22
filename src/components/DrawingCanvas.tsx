@@ -17,9 +17,18 @@ interface DrawingCanvasProps {
   roomId: string;
   gameStarted: boolean;
   currentWord: string;
+  isChoosingWord: boolean;
+  drawingPlayerName: string;
 }
 
-const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameStarted, currentWord }) => {
+const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ 
+  isDrawing, 
+  roomId, 
+  gameStarted, 
+  currentWord,
+  isChoosingWord,
+  drawingPlayerName
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { socket } = useSocket();
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
@@ -251,8 +260,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
     }
     
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
     };
   }, []);
 
@@ -361,6 +370,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
 
   // Show appropriate overlay based on game state
   const renderOverlay = () => {
+    // Game hasn't started yet
     if (!gameStarted) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
@@ -373,28 +383,35 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
       );
     }
 
-    if (!isDrawing && !currentWord) {
+    // Someone is choosing a word (but not during active drawing)
+    if (isChoosingWord && !currentWord) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
           <div className="text-center">
             <p className="text-gray-600 font-medium text-lg">
-              Someone is choosing a word...
+              {drawingPlayerName} is choosing a word...
             </p>
           </div>
         </div>
       );
     }
 
-    if (!isDrawing && currentWord) {
+    // Not drawing and no current word (waiting state)
+    if (!isDrawing && !currentWord && !isChoosingWord) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
           <div className="text-center">
             <p className="text-gray-600 font-medium text-lg">
-              Watch and guess the drawing!
+              Waiting for the next turn...
             </p>
           </div>
         </div>
       );
+    }
+
+    // Watching someone else draw (no overlay needed - show the drawing clearly)
+    if (!isDrawing && currentWord) {
+      return null; // No overlay - let players see the drawing clearly
     }
 
     return null;

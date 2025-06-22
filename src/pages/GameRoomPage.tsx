@@ -510,6 +510,8 @@ const GameRoomPage: React.FC = () => {
               roomId={gameState.roomId || ''} 
               gameStarted={gameState.isPlaying}
               currentWord={gameState.currentWord}
+              isChoosingWord={gameState.isChoosingWord}
+              drawingPlayerName={gameState.drawingPlayerName}
             />
           </div>
         </div>
