@@ -370,7 +370,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   // Show appropriate overlay based on game state
   const renderOverlay = () => {
-    // Game hasn't started yet
+    // Only show overlay if game hasn't started yet
     if (!gameStarted) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
@@ -383,37 +383,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       );
     }
 
-    // Someone is choosing a word (but not during active drawing)
-    if (isChoosingWord && !currentWord) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
-          <div className="text-center">
-            <p className="text-gray-600 font-medium text-lg">
-              {drawingPlayerName} is choosing a word...
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    // Not drawing and no current word (waiting state)
-    if (!isDrawing && !currentWord && !isChoosingWord) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
-          <div className="text-center">
-            <p className="text-gray-600 font-medium text-lg">
-              Waiting for the next turn...
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    // Watching someone else draw (no overlay needed - show the drawing clearly)
-    if (!isDrawing && currentWord) {
-      return null; // No overlay - let players see the drawing clearly
-    }
-
+    // No overlay during any game phase - let players see the canvas clearly
     return null;
   };
 
