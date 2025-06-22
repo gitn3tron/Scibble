@@ -31,43 +31,43 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
         case 'happy':
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-1 rounded-t-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-1 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
             </>
           );
         case 'wink':
           return (
             <>
-              <div className={`${baseStyle} w-1 h-1 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-1 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
             </>
           );
         case 'surprised':
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-2 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-2 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
             </>
           );
         case 'sleepy':
           return (
             <>
-              <div className={`${baseStyle} w-2 h-0.5 left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-2 h-0.5 right-1/4 top-1/3 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-3 h-0.5 left-1/4 top-1/3 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-3 h-0.5 right-1/4 top-1/3 transform translate-x-1/2`}></div>
             </>
           );
         case 'star':
           return (
             <>
-              <div className="absolute left-1/4 top-1/3 transform -translate-x-1/2 text-yellow-400 text-xs">✦</div>
-              <div className="absolute right-1/4 top-1/3 transform translate-x-1/2 text-yellow-400 text-xs">✦</div>
+              <div className="absolute left-1/4 top-1/3 transform -translate-x-1/2 text-yellow-400 text-sm">✦</div>
+              <div className="absolute right-1/4 top-1/3 transform translate-x-1/2 text-yellow-400 text-sm">✦</div>
             </>
           );
         default: // normal
           return (
             <>
-              <div className={`${baseStyle} w-1 h-1 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1 h-1 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
             </>
           );
       }
@@ -82,29 +82,29 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
         case 'raised':
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-full left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-full right-1/4 top-1/4 transform translate-x-1/2 -rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 rounded-full left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 rounded-full right-1/4 top-1/4 transform translate-x-1/2 -rotate-12`}></div>
             </>
           );
         case 'angry':
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 -rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 -rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
             </>
           );
         case 'worried':
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
             </>
           );
         default: // normal
           return (
             <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-2 h-0.5 right-1/4 top-1/4 transform translate-x-1/2`}></div>
             </>
           );
       }
@@ -116,30 +116,30 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
       switch (player.avatar.mouth) {
         case 'laugh':
           return (
-            <div className={`${baseStyle} w-4 h-2 bg-black rounded-b-full left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
+            <div className={`${baseStyle} w-5 h-3 bg-black rounded-b-full left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
           );
         case 'neutral':
           return (
-            <div className={`${baseStyle} w-3 h-0.5 bg-black left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
+            <div className={`${baseStyle} w-4 h-0.5 bg-black left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
           );
         case 'surprised':
           return (
-            <div className={`${baseStyle} w-2 h-2 bg-black rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
+            <div className={`${baseStyle} w-3 h-3 bg-black rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
           );
         case 'sad':
           return (
-            <div className={`${baseStyle} w-3 h-1.5 border-t-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-t-full`}></div>
+            <div className={`${baseStyle} w-4 h-2 border-t-2 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-t-full`}></div>
           );
         case 'tongue':
           return (
             <>
-              <div className={`${baseStyle} w-3 h-1.5 border-b-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
-              <div className={`${baseStyle} w-1 h-1 bg-pink-400 rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
+              <div className={`${baseStyle} w-4 h-2 border-b-2 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
+              <div className={`${baseStyle} w-1.5 h-1.5 bg-pink-400 rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
             </>
           );
         default: // smile
           return (
-            <div className={`${baseStyle} w-3 h-1.5 border-b-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
+            <div className={`${baseStyle} w-4 h-2 border-b-2 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
           );
       }
     };
@@ -147,36 +147,36 @@ const PlayersList: React.FC<PlayersListProps> = ({ players, currentPlayerId }) =
     const renderAccessory = () => {
       if (player.avatar.accessory === 'none') return null;
       
-      const baseStyle = "absolute text-xs";
+      const baseStyle = "absolute flex items-center justify-center";
       
       switch (player.avatar.accessory) {
         case 'glasses':
           return (
-            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
+            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2 text-lg`}>
               👓
             </div>
           );
         case 'sunglasses':
           return (
-            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
+            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2 text-lg`}>
               🕶️
             </div>
           );
         case 'hat':
           return (
-            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
+            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/4 text-xl`}>
               🎩
             </div>
           );
         case 'crown':
           return (
-            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
+            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/4 text-xl`}>
               👑
             </div>
           );
         case 'headband':
           return (
-            <div className={`${baseStyle} left-1/2 top-1/4 transform -translate-x-1/2 -translate-y-1/2`}>
+            <div className={`${baseStyle} left-1/2 top-1/6 transform -translate-x-1/2 -translate-y-1/2 text-lg`}>
               🎀
             </div>
           );
