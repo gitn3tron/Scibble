@@ -17,9 +17,18 @@ interface DrawingCanvasProps {
   roomId: string;
   gameStarted: boolean;
   currentWord: string;
+  isChoosingWord: boolean;
+  drawingPlayerName: string;
 }
 
-const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameStarted, currentWord }) => {
+const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ 
+  isDrawing, 
+  roomId, 
+  gameStarted, 
+  currentWord,
+  isChoosingWord,
+  drawingPlayerName
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { socket } = useSocket();
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
@@ -127,14 +136,30 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
       clearCanvas(false);
     };
 
-    const handleUndoCanvas = () => {
+    const handleUndoCanvas = (data: { imageData: number[] }) => {
       console.log('↩️ Received undo from other player');
-      performUndo(false);
+      if (!canvasRef.current) return;
+      
+      const canvas = canvasRef.current;
+      const imageData = new ImageData(
+        new Uint8ClampedArray(data.imageData),
+        canvas.width,
+        canvas.height
+      );
+      ctx.putImageData(imageData, 0, 0);
     };
 
-    const handleRedoCanvas = () => {
+    const handleRedoCanvas = (data: { imageData: number[] }) => {
       console.log('↪️ Received redo from other player');
-      performRedo(false);
+      if (!canvasRef.current) return;
+      
+      const canvas = canvasRef.current;
+      const imageData = new ImageData(
+        new Uint8ClampedArray(data.imageData),
+        canvas.width,
+        canvas.height
+      );
+      ctx.putImageData(imageData, 0, 0);
     };
 
     socket.on('drawing-data', handleDrawingData);
@@ -251,8 +276,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
     }
     
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
     };
   }, []);
 
@@ -332,7 +357,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
     
     if (broadcast && socket && roomId && isDrawing) {
       console.log('↩️ Broadcasting undo to other players');
-      socket.emit('undo', { roomId });
+      const imageDataArray = Array.from(previousState.imageData.data);
+      socket.emit('undo', { 
+        roomId,
+        imageData: imageDataArray
+      });
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
@@ -350,7 +379,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
     
     if (broadcast && socket && roomId && isDrawing) {
       console.log('↪️ Broadcasting redo to other players');
-      socket.emit('redo', { roomId });
+      const imageDataArray = Array.from(stateToRestore.imageData.data);
+      socket.emit('redo', { 
+        roomId,
+        imageData: imageDataArray
+      });
     }
   }, [ctx, redoStack, socket, roomId, isDrawing]);
 
@@ -361,6 +394,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
 
   // Show appropriate overlay based on game state
   const renderOverlay = () => {
+    // Only show overlay if game hasn't started yet
     if (!gameStarted) {
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
@@ -373,30 +407,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ isDrawing, roomId, gameSt
       );
     }
 
-    if (!isDrawing && !currentWord) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
-          <div className="text-center">
-            <p className="text-gray-600 font-medium text-lg">
-              Someone is choosing a word...
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    if (!isDrawing && currentWord) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 pointer-events-none">
-          <div className="text-center">
-            <p className="text-gray-600 font-medium text-lg">
-              Watch and guess the drawing!
-            </p>
-          </div>
-        </div>
-      );
-    }
-
+    // No overlay during any game phase - let players see the canvas clearly
     return null;
   };
 
