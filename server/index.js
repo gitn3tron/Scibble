@@ -818,9 +818,9 @@ io.on('connection', (socket) => {
 
   socket.on('undo', (data) => {
     try {
-      const { roomId } = data;
+      const { roomId, imageData } = data;
       
-      socket.to(roomId).emit('undo-canvas');
+      socket.to(roomId).emit('undo-canvas', { imageData });
       
     } catch (error) {
       console.error('❌ Error handling undo event:', error);
@@ -829,9 +829,9 @@ io.on('connection', (socket) => {
 
   socket.on('redo', (data) => {
     try {
-      const { roomId } = data;
+      const { roomId, imageData } = data;
       
-      socket.to(roomId).emit('redo-canvas');
+      socket.to(roomId).emit('redo-canvas', { imageData });
       
     } catch (error) {
       console.error('❌ Error handling redo event:', error);

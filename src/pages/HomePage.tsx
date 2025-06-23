@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import AvatarCreator from '../components/AvatarCreator';
+import HowToPlayModal from '../components/HowToPlayModal';
 import { v4 as uuidv4 } from 'uuid';
-import { PencilRuler } from 'lucide-react';
+import { PencilRuler, HelpCircle } from 'lucide-react';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,11 +20,18 @@ const HomePage: React.FC = () => {
   });
   const [nameError, setNameError] = useState('');
   const [roomError, setRoomError] = useState('');
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
       setName(savedName);
+    }
+
+    // Show how to play modal on first visit
+    const hasSeenTutorial = localStorage.getItem('hasSeenTutorial');
+    if (!hasSeenTutorial) {
+      setShowHowToPlay(true);
     }
   }, []);
 
@@ -88,16 +96,32 @@ const HomePage: React.FC = () => {
     if (roomError) setRoomError('');
   };
 
+  const handleCloseHowToPlay = () => {
+    setShowHowToPlay(false);
+    localStorage.setItem('hasSeenTutorial', 'true');
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-lg bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden text-white transition-all duration-300 hover:shadow-3xl border border-white/20">
-        <div className="p-8 bg-gradient-to-r from-purple-600/80 to-indigo-600/80 backdrop-blur-sm flex items-center justify-center">
+        <div className="p-8 bg-gradient-to-r from-purple-600/80 to-indigo-600/80 backdrop-blur-sm flex items-center justify-center relative">
+          <button
+            onClick={() => setShowHowToPlay(true)}
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/20 transition-colors"
+            title="How to Play"
+          >
+            <HelpCircle size={24} className="text-white" />
+          </button>
+          
           <div className="flex flex-col items-center">
             <PencilRuler size={56} className="text-white mb-3 drop-shadow-lg" />
             <h1 className="text-4xl font-bold text-center text-white drop-shadow-lg">
               Scribble Draw & Guess
             </h1>
             <p className="text-purple-100 text-center mt-2 text-lg">Draw, guess, and have fun!</p>
+            <div className="mt-3 text-sm bg-white/20 rounded-full px-3 py-1">
+              Created by <span className="font-bold">Raanghaan</span> 🎨
+            </div>
           </div>
         </div>
 
@@ -160,6 +184,11 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <HowToPlayModal 
+        isOpen={showHowToPlay} 
+        onClose={handleCloseHowToPlay} 
+      />
     </div>
   );
 };

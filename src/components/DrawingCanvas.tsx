@@ -136,14 +136,30 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       clearCanvas(false);
     };
 
-    const handleUndoCanvas = () => {
+    const handleUndoCanvas = (data: { imageData: number[] }) => {
       console.log('↩️ Received undo from other player');
-      performUndo(false);
+      if (!canvasRef.current) return;
+      
+      const canvas = canvasRef.current;
+      const imageData = new ImageData(
+        new Uint8ClampedArray(data.imageData),
+        canvas.width,
+        canvas.height
+      );
+      ctx.putImageData(imageData, 0, 0);
     };
 
-    const handleRedoCanvas = () => {
+    const handleRedoCanvas = (data: { imageData: number[] }) => {
       console.log('↪️ Received redo from other player');
-      performRedo(false);
+      if (!canvasRef.current) return;
+      
+      const canvas = canvasRef.current;
+      const imageData = new ImageData(
+        new Uint8ClampedArray(data.imageData),
+        canvas.width,
+        canvas.height
+      );
+      ctx.putImageData(imageData, 0, 0);
     };
 
     socket.on('drawing-data', handleDrawingData);
@@ -341,7 +357,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     if (broadcast && socket && roomId && isDrawing) {
       console.log('↩️ Broadcasting undo to other players');
-      socket.emit('undo', { roomId });
+      const imageDataArray = Array.from(previousState.imageData.data);
+      socket.emit('undo', { 
+        roomId,
+        imageData: imageDataArray
+      });
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
@@ -359,7 +379,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     if (broadcast && socket && roomId && isDrawing) {
       console.log('↪️ Broadcasting redo to other players');
-      socket.emit('redo', { roomId });
+      const imageDataArray = Array.from(stateToRestore.imageData.data);
+      socket.emit('redo', { 
+        roomId,
+        imageData: imageDataArray
+      });
     }
   }, [ctx, redoStack, socket, roomId, isDrawing]);
 
