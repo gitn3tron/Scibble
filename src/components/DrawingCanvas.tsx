@@ -40,9 +40,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [customColor, setCustomColor] = useState('#000000');
   
-  // Enhanced undo/redo system
+  // Enhanced undo/redo system - FIXED: Better state management
   const [undoStack, setUndoStack] = useState<CanvasState[]>([]);
   const [redoStack, setRedoStack] = useState<CanvasState[]>([]);
+  const [isApplyingRemoteAction, setIsApplyingRemoteAction] = useState(false);
 
   // Initialize canvas
   useEffect(() => {
@@ -137,39 +138,44 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       clearCanvas(false);
     };
 
+    // FIXED: Proper undo/redo handling for remote players
     const handleUndoCanvas = (data: { imageData: number[] }) => {
       console.log('↩️ Received undo from other player');
-      if (!canvasRef.current) return;
+      setIsApplyingRemoteAction(true);
       
       try {
+        if (!canvasRef.current) return;
+        
         const canvas = canvasRef.current;
-        const imageData = new ImageData(
-          new Uint8ClampedArray(data.imageData),
-          canvas.width,
-          canvas.height
-        );
+        const uint8Array = new Uint8ClampedArray(data.imageData);
+        const imageData = new ImageData(uint8Array, canvas.width, canvas.height);
+        
         ctx.putImageData(imageData, 0, 0);
         console.log('✅ Undo applied successfully for other player');
       } catch (error) {
         console.error('❌ Error applying undo from other player:', error);
+      } finally {
+        setIsApplyingRemoteAction(false);
       }
     };
 
     const handleRedoCanvas = (data: { imageData: number[] }) => {
       console.log('↪️ Received redo from other player');
-      if (!canvasRef.current) return;
+      setIsApplyingRemoteAction(true);
       
       try {
+        if (!canvasRef.current) return;
+        
         const canvas = canvasRef.current;
-        const imageData = new ImageData(
-          new Uint8ClampedArray(data.imageData),
-          canvas.width,
-          canvas.height
-        );
+        const uint8Array = new Uint8ClampedArray(data.imageData);
+        const imageData = new ImageData(uint8Array, canvas.width, canvas.height);
+        
         ctx.putImageData(imageData, 0, 0);
         console.log('✅ Redo applied successfully for other player');
       } catch (error) {
         console.error('❌ Error applying redo from other player:', error);
+      } finally {
+        setIsApplyingRemoteAction(false);
       }
     };
 
@@ -186,8 +192,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
   }, [socket, ctx]);
 
+  // FIXED: Better state saving - only save when drawing ends, not during drawing
   const saveState = useCallback(() => {
-    if (!ctx || !canvasRef.current) return;
+    if (!ctx || !canvasRef.current || isApplyingRemoteAction) return;
     
     const canvas = canvasRef.current;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -204,7 +211,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Clear redo stack when new action is performed
     setRedoStack([]);
-  }, [ctx]);
+    console.log('💾 Canvas state saved for undo/redo');
+  }, [ctx, isApplyingRemoteAction]);
 
   const floodFill = useCallback((startX: number, startY: number, fillColor: string, broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
@@ -299,14 +307,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const point = getPointerPosition(e);
     
     if (tool === 'fill') {
-      saveState();
+      saveState(); // Save state before fill
       floodFill(point.x, point.y, color);
       return;
     }
     
     setDrawing(true);
     setLastPoint(point);
-    saveState();
+    // Don't save state here - wait until drawing ends
   }, [isDrawing, ctx, tool, getPointerPosition, saveState, floodFill, color]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -334,16 +342,20 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setLastPoint(currentPoint);
   }, [drawing, isDrawing, ctx, lastPoint, tool, getPointerPosition, socket, roomId, color, brushSize]);
 
+  // FIXED: Save state when drawing ends, not during drawing
   const endDrawing = useCallback(() => {
+    if (drawing) {
+      saveState(); // Save state when drawing stroke is complete
+    }
     setDrawing(false);
     setLastPoint(null);
-  }, []);
+  }, [drawing, saveState]);
 
   const clearCanvas = useCallback((broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
     
     const canvas = canvasRef.current;
-    saveState();
+    saveState(); // Save state before clearing
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -353,8 +365,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   }, [ctx, saveState, socket, roomId, isDrawing]);
 
+  // FIXED: Improved undo function with better error handling
   const performUndo = useCallback((broadcast = true) => {
-    if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
+    if (!ctx || !canvasRef.current || undoStack.length <= 1) {
+      console.log('↩️ Cannot undo: insufficient history');
+      return;
+    }
     
     console.log('↩️ Performing undo operation');
     
@@ -364,20 +380,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setRedoStack(prev => [...prev, currentState]);
     setUndoStack(prev => prev.slice(0, -1));
     
-    ctx.putImageData(previousState.imageData, 0, 0);
-    
-    if (broadcast && socket && roomId && isDrawing) {
-      console.log('↩️ Broadcasting undo to other players');
-      const imageDataArray = Array.from(previousState.imageData.data);
-      socket.emit('undo', { 
-        roomId,
-        imageData: imageDataArray
-      });
+    try {
+      ctx.putImageData(previousState.imageData, 0, 0);
+      console.log('✅ Undo applied locally');
+      
+      if (broadcast && socket && roomId && isDrawing) {
+        console.log('↩️ Broadcasting undo to other players');
+        const imageDataArray = Array.from(previousState.imageData.data);
+        socket.emit('undo', { 
+          roomId,
+          imageData: imageDataArray
+        });
+        console.log('✅ Undo broadcast sent');
+      }
+    } catch (error) {
+      console.error('❌ Error applying undo:', error);
+      // Restore stacks on error
+      setUndoStack(prev => [...prev, currentState]);
+      setRedoStack(prev => prev.slice(0, -1));
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
+  // FIXED: Improved redo function with better error handling
   const performRedo = useCallback((broadcast = true) => {
-    if (!ctx || !canvasRef.current || redoStack.length === 0) return;
+    if (!ctx || !canvasRef.current || redoStack.length === 0) {
+      console.log('↪️ Cannot redo: no redo history');
+      return;
+    }
     
     console.log('↪️ Performing redo operation');
     
@@ -386,15 +415,24 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setUndoStack(prev => [...prev, stateToRestore]);
     setRedoStack(prev => prev.slice(0, -1));
     
-    ctx.putImageData(stateToRestore.imageData, 0, 0);
-    
-    if (broadcast && socket && roomId && isDrawing) {
-      console.log('↪️ Broadcasting redo to other players');
-      const imageDataArray = Array.from(stateToRestore.imageData.data);
-      socket.emit('redo', { 
-        roomId,
-        imageData: imageDataArray
-      });
+    try {
+      ctx.putImageData(stateToRestore.imageData, 0, 0);
+      console.log('✅ Redo applied locally');
+      
+      if (broadcast && socket && roomId && isDrawing) {
+        console.log('↪️ Broadcasting redo to other players');
+        const imageDataArray = Array.from(stateToRestore.imageData.data);
+        socket.emit('redo', { 
+          roomId,
+          imageData: imageDataArray
+        });
+        console.log('✅ Redo broadcast sent');
+      }
+    } catch (error) {
+      console.error('❌ Error applying redo:', error);
+      // Restore stacks on error
+      setUndoStack(prev => prev.slice(0, -1));
+      setRedoStack(prev => [...prev, stateToRestore]);
     }
   }, [ctx, redoStack, socket, roomId, isDrawing]);
 
