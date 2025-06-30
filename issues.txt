@@ -1,0 +1,23 @@
+1. word selection's bg color is conflicting with word text color 
+2. avaters Accessories aren't properly aligned , like they are too small to adjust with eyes,head and so on 
+3. also when a player is drawing , the "waiting for drawer..." is still on other player's canvas , it should remove when the drawer selects a word 
+4. also when it selects a word automatically it shows invalid word selection in debug log . but it's not creating any issue in the game , here is the debug log [1] 📤 Notifying hayat that N3TRON is choosing word
+[1] ⏰ Word selection countdown: 14s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 13s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 12s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 11s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 10s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 9s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 8s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 7s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 6s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 5s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 4s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 3s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 2s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 1s remaining for room 3UAQNV
+[1] ⏰ Word selection countdown: 0s remaining for room 3UAQNV
+[1] ⏰ Auto-selecting word for room 3UAQNV
+[1] 📝 Word selected: diamond for room 3UAQNV
+[1] 📝 CRITICAL: Received word-selected event: { roomId: '3UAQNV', selectedWord: 'diamond' }
+[1] ❌ Invalid word selection

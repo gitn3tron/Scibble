@@ -82,7 +82,7 @@ const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ isOpen, onClose }) => {
             <h2 className="text-3xl font-bold mb-2">How to Play</h2>
             <p className="text-purple-100">Scribble Draw & Guess Game</p>
             <div className="mt-4 text-sm bg-white/20 rounded-full px-4 py-2 inline-block">
-              Created by <span className="font-bold">Raanghaan</span> 🎨
+              Created by <span className="font-bold">Mohammad Abir Hayat</span> 🎨
             </div>
           </div>
         </div>

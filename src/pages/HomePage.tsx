@@ -120,7 +120,7 @@ const HomePage: React.FC = () => {
             </h1>
             <p className="text-purple-100 text-center mt-2 text-lg">Draw, guess, and have fun!</p>
             <div className="mt-3 text-sm bg-white/20 rounded-full px-3 py-1">
-              Created by <span className="font-bold">Raanghaan</span> 🎨
+              Created by <span className="font-bold">Mohammad Abir Hayat</span> 🎨
             </div>
           </div>
         </div>

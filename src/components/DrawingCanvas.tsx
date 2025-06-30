@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { Paintbrush, Eraser, PaintBucket, Palette, Undo2, Redo2, RefreshCw } from 'lucide-react';
+import { Paintbrush, Eraser, PaintBucket, Palette, Undo2, Redo2, RefreshCw, X } from 'lucide-react';
 
 interface Point {
   x: number;
@@ -38,10 +38,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [brushSize, setBrushSize] = useState(3);
   const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [customColor, setCustomColor] = useState('#000000');
   
-  // Enhanced undo/redo system
+  // Enhanced undo/redo system - FIXED: Better state management
   const [undoStack, setUndoStack] = useState<CanvasState[]>([]);
   const [redoStack, setRedoStack] = useState<CanvasState[]>([]);
+  const [isApplyingRemoteAction, setIsApplyingRemoteAction] = useState(false);
 
   // Initialize canvas
   useEffect(() => {
@@ -136,30 +138,45 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       clearCanvas(false);
     };
 
+    // FIXED: Proper undo/redo handling for remote players
     const handleUndoCanvas = (data: { imageData: number[] }) => {
       console.log('↩️ Received undo from other player');
-      if (!canvasRef.current) return;
+      setIsApplyingRemoteAction(true);
       
-      const canvas = canvasRef.current;
-      const imageData = new ImageData(
-        new Uint8ClampedArray(data.imageData),
-        canvas.width,
-        canvas.height
-      );
-      ctx.putImageData(imageData, 0, 0);
+      try {
+        if (!canvasRef.current) return;
+        
+        const canvas = canvasRef.current;
+        const uint8Array = new Uint8ClampedArray(data.imageData);
+        const imageData = new ImageData(uint8Array, canvas.width, canvas.height);
+        
+        ctx.putImageData(imageData, 0, 0);
+        console.log('✅ Undo applied successfully for other player');
+      } catch (error) {
+        console.error('❌ Error applying undo from other player:', error);
+      } finally {
+        setIsApplyingRemoteAction(false);
+      }
     };
 
     const handleRedoCanvas = (data: { imageData: number[] }) => {
       console.log('↪️ Received redo from other player');
-      if (!canvasRef.current) return;
+      setIsApplyingRemoteAction(true);
       
-      const canvas = canvasRef.current;
-      const imageData = new ImageData(
-        new Uint8ClampedArray(data.imageData),
-        canvas.width,
-        canvas.height
-      );
-      ctx.putImageData(imageData, 0, 0);
+      try {
+        if (!canvasRef.current) return;
+        
+        const canvas = canvasRef.current;
+        const uint8Array = new Uint8ClampedArray(data.imageData);
+        const imageData = new ImageData(uint8Array, canvas.width, canvas.height);
+        
+        ctx.putImageData(imageData, 0, 0);
+        console.log('✅ Redo applied successfully for other player');
+      } catch (error) {
+        console.error('❌ Error applying redo from other player:', error);
+      } finally {
+        setIsApplyingRemoteAction(false);
+      }
     };
 
     socket.on('drawing-data', handleDrawingData);
@@ -175,8 +192,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
   }, [socket, ctx]);
 
+  // FIXED: Better state saving - only save when drawing ends, not during drawing
   const saveState = useCallback(() => {
-    if (!ctx || !canvasRef.current) return;
+    if (!ctx || !canvasRef.current || isApplyingRemoteAction) return;
     
     const canvas = canvasRef.current;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -193,7 +211,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Clear redo stack when new action is performed
     setRedoStack([]);
-  }, [ctx]);
+    console.log('💾 Canvas state saved for undo/redo');
+  }, [ctx, isApplyingRemoteAction]);
 
   const floodFill = useCallback((startX: number, startY: number, fillColor: string, broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
@@ -288,14 +307,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const point = getPointerPosition(e);
     
     if (tool === 'fill') {
-      saveState();
+      saveState(); // Save state before fill
       floodFill(point.x, point.y, color);
       return;
     }
     
     setDrawing(true);
     setLastPoint(point);
-    saveState();
+    // Don't save state here - wait until drawing ends
   }, [isDrawing, ctx, tool, getPointerPosition, saveState, floodFill, color]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -323,16 +342,20 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setLastPoint(currentPoint);
   }, [drawing, isDrawing, ctx, lastPoint, tool, getPointerPosition, socket, roomId, color, brushSize]);
 
+  // FIXED: Save state when drawing ends, not during drawing
   const endDrawing = useCallback(() => {
+    if (drawing) {
+      saveState(); // Save state when drawing stroke is complete
+    }
     setDrawing(false);
     setLastPoint(null);
-  }, []);
+  }, [drawing, saveState]);
 
   const clearCanvas = useCallback((broadcast = true) => {
     if (!ctx || !canvasRef.current) return;
     
     const canvas = canvasRef.current;
-    saveState();
+    saveState(); // Save state before clearing
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -342,8 +365,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   }, [ctx, saveState, socket, roomId, isDrawing]);
 
+  // FIXED: Improved undo function with better error handling
   const performUndo = useCallback((broadcast = true) => {
-    if (!ctx || !canvasRef.current || undoStack.length <= 1) return;
+    if (!ctx || !canvasRef.current || undoStack.length <= 1) {
+      console.log('↩️ Cannot undo: insufficient history');
+      return;
+    }
     
     console.log('↩️ Performing undo operation');
     
@@ -353,20 +380,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setRedoStack(prev => [...prev, currentState]);
     setUndoStack(prev => prev.slice(0, -1));
     
-    ctx.putImageData(previousState.imageData, 0, 0);
-    
-    if (broadcast && socket && roomId && isDrawing) {
-      console.log('↩️ Broadcasting undo to other players');
-      const imageDataArray = Array.from(previousState.imageData.data);
-      socket.emit('undo', { 
-        roomId,
-        imageData: imageDataArray
-      });
+    try {
+      ctx.putImageData(previousState.imageData, 0, 0);
+      console.log('✅ Undo applied locally');
+      
+      if (broadcast && socket && roomId && isDrawing) {
+        console.log('↩️ Broadcasting undo to other players');
+        const imageDataArray = Array.from(previousState.imageData.data);
+        socket.emit('undo', { 
+          roomId,
+          imageData: imageDataArray
+        });
+        console.log('✅ Undo broadcast sent');
+      }
+    } catch (error) {
+      console.error('❌ Error applying undo:', error);
+      // Restore stacks on error
+      setUndoStack(prev => [...prev, currentState]);
+      setRedoStack(prev => prev.slice(0, -1));
     }
   }, [ctx, undoStack, socket, roomId, isDrawing]);
 
+  // FIXED: Improved redo function with better error handling
   const performRedo = useCallback((broadcast = true) => {
-    if (!ctx || !canvasRef.current || redoStack.length === 0) return;
+    if (!ctx || !canvasRef.current || redoStack.length === 0) {
+      console.log('↪️ Cannot redo: no redo history');
+      return;
+    }
     
     console.log('↪️ Performing redo operation');
     
@@ -375,21 +415,48 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setUndoStack(prev => [...prev, stateToRestore]);
     setRedoStack(prev => prev.slice(0, -1));
     
-    ctx.putImageData(stateToRestore.imageData, 0, 0);
-    
-    if (broadcast && socket && roomId && isDrawing) {
-      console.log('↪️ Broadcasting redo to other players');
-      const imageDataArray = Array.from(stateToRestore.imageData.data);
-      socket.emit('redo', { 
-        roomId,
-        imageData: imageDataArray
-      });
+    try {
+      ctx.putImageData(stateToRestore.imageData, 0, 0);
+      console.log('✅ Redo applied locally');
+      
+      if (broadcast && socket && roomId && isDrawing) {
+        console.log('↪️ Broadcasting redo to other players');
+        const imageDataArray = Array.from(stateToRestore.imageData.data);
+        socket.emit('redo', { 
+          roomId,
+          imageData: imageDataArray
+        });
+        console.log('✅ Redo broadcast sent');
+      }
+    } catch (error) {
+      console.error('❌ Error applying redo:', error);
+      // Restore stacks on error
+      setUndoStack(prev => prev.slice(0, -1));
+      setRedoStack(prev => [...prev, stateToRestore]);
     }
   }, [ctx, redoStack, socket, roomId, isDrawing]);
 
+  // Enhanced color palette with more colors
   const colorOptions = [
+    // Basic colors
     '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', 
-    '#FF00FF', '#00FFFF', '#FF9900', '#9900FF', '#99FF00', '#FF0099'
+    '#FF00FF', '#00FFFF', '#FF9900', '#9900FF', '#99FF00', '#FF0099',
+    
+    // Additional vibrant colors
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
+    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA',
+    
+    // Dark colors
+    '#2C3E50', '#34495E', '#7F8C8D', '#95A5A6', '#BDC3C7', '#ECF0F1',
+    '#E74C3C', '#E67E22', '#F39C12', '#F1C40F', '#2ECC71', '#27AE60',
+    
+    // Pastel colors
+    '#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E6BAFF',
+    '#FFB3E6', '#C9BAFF', '#BAFFFF', '#FFBABA', '#D4BAFF', '#BAFFE6',
+    
+    // Professional colors
+    '#8E44AD', '#9B59B6', '#3498DB', '#2980B9', '#1ABC9C', '#16A085',
+    '#E8F8F5', '#D5F4E6', '#FDEAA7', '#F8D7DA', '#D1ECF1', '#D6EAF8'
   ];
 
   // Show appropriate overlay based on game state
@@ -409,6 +476,18 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
     // No overlay during any game phase - let players see the canvas clearly
     return null;
+  };
+
+  const handleColorSelect = (selectedColor: string) => {
+    setColor(selectedColor);
+    setCustomColor(selectedColor);
+    setShowColorPicker(false);
+  };
+
+  const handleCustomColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newColor = e.target.value;
+    setCustomColor(newColor);
+    setColor(newColor);
   };
 
   return (
@@ -474,19 +553,54 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             </button>
             
             {showColorPicker && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white p-3 rounded-lg shadow-lg z-10 border">
-                <div className="grid grid-cols-4 gap-2 w-32">
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white p-4 rounded-lg shadow-lg z-10 border max-w-xs">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">Color Palette</h3>
+                  <button
+                    onClick={() => setShowColorPicker(false)}
+                    className="p-1 rounded-full hover:bg-gray-100"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                
+                {/* Custom Color Picker */}
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">Custom Color</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={customColor}
+                      onChange={handleCustomColorChange}
+                      className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                      title="Pick custom color"
+                    />
+                    <input
+                      type="text"
+                      value={customColor}
+                      onChange={(e) => {
+                        setCustomColor(e.target.value);
+                        if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
+                          setColor(e.target.value);
+                        }
+                      }}
+                      className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      placeholder="#000000"
+                      maxLength={7}
+                    />
+                  </div>
+                </div>
+                
+                {/* Preset Colors */}
+                <div className="grid grid-cols-8 gap-1 max-h-32 overflow-y-auto">
                   {colorOptions.map((c) => (
                     <button
                       key={c}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                        color === c ? 'border-gray-400 scale-110' : 'border-gray-200'
+                      className={`w-6 h-6 rounded border-2 transition-transform hover:scale-110 ${
+                        color === c ? 'border-gray-600 scale-110' : 'border-gray-200'
                       }`}
                       style={{ backgroundColor: c }}
-                      onClick={() => {
-                        setColor(c);
-                        setShowColorPicker(false);
-                      }}
+                      onClick={() => handleColorSelect(c)}
                       title={c}
                     />
                   ))}

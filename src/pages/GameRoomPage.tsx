@@ -7,6 +7,7 @@ import ChatBox from '../components/ChatBox';
 import PlayersList from '../components/PlayersList';
 import GameOverScreen from '../components/GameOverScreen';
 import WordSelection from '../components/WordSelection';
+import AvatarDisplay from '../components/AvatarDisplay';
 import { Clock, Home, Play, Users, Crown } from 'lucide-react';
 
 const GameRoomPage: React.FC = () => {
@@ -72,181 +73,6 @@ const GameRoomPage: React.FC = () => {
   const isDrawing = player && gameState.players.find(p => p.id === player.id)?.isDrawing;
   // Host is the FIRST player in the room (index 0), not the last
   const isHost = player && gameState.players.length > 0 && gameState.players[0].id === player.id;
-
-  const renderPlayerAvatar = (player: any) => {
-    const renderEyes = () => {
-      const baseStyle = "absolute bg-black";
-      
-      switch (player.avatar.eyes) {
-        case 'happy':
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
-            </>
-          );
-        case 'wink':
-          return (
-            <>
-              <div className={`${baseStyle} w-1 h-1 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-t-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
-            </>
-          );
-        case 'surprised':
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-1.5 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
-            </>
-          );
-        case 'sleepy':
-          return (
-            <>
-              <div className={`${baseStyle} w-2 h-0.5 left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-2 h-0.5 right-1/4 top-1/3 transform translate-x-1/2`}></div>
-            </>
-          );
-        case 'star':
-          return (
-            <>
-              <div className="absolute left-1/4 top-1/3 transform -translate-x-1/2 text-yellow-400 text-xs">✦</div>
-              <div className="absolute right-1/4 top-1/3 transform translate-x-1/2 text-yellow-400 text-xs">✦</div>
-            </>
-          );
-        default: // normal
-          return (
-            <>
-              <div className={`${baseStyle} w-1 h-1 rounded-full left-1/4 top-1/3 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1 h-1 rounded-full right-1/4 top-1/3 transform translate-x-1/2`}></div>
-            </>
-          );
-      }
-    };
-
-    const renderEyebrows = () => {
-      if (player.avatar.eyebrows === 'none') return null;
-      
-      const baseStyle = "absolute bg-black";
-      
-      switch (player.avatar.eyebrows) {
-        case 'raised':
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-full left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 rounded-full right-1/4 top-1/4 transform translate-x-1/2 -rotate-12`}></div>
-            </>
-          );
-        case 'angry':
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 -rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
-            </>
-          );
-        case 'worried':
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2 rotate-12`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2 rotate-12`}></div>
-            </>
-          );
-        default: // normal
-          return (
-            <>
-              <div className={`${baseStyle} w-1.5 h-0.5 left-1/4 top-1/4 transform -translate-x-1/2`}></div>
-              <div className={`${baseStyle} w-1.5 h-0.5 right-1/4 top-1/4 transform translate-x-1/2`}></div>
-            </>
-          );
-      }
-    };
-
-    const renderMouth = () => {
-      const baseStyle = "absolute";
-      
-      switch (player.avatar.mouth) {
-        case 'laugh':
-          return (
-            <div className={`${baseStyle} w-3 h-1.5 bg-black rounded-b-full left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
-          );
-        case 'neutral':
-          return (
-            <div className={`${baseStyle} w-3 h-0.5 bg-black left-1/2 bottom-1/4 transform -translate-x-1/2`}></div>
-          );
-        case 'surprised':
-          return (
-            <div className={`${baseStyle} w-2 h-2 bg-black rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
-          );
-        case 'sad':
-          return (
-            <div className={`${baseStyle} w-3 h-1.5 border-t-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-t-full`}></div>
-          );
-        case 'tongue':
-          return (
-            <>
-              <div className={`${baseStyle} w-3 h-1.5 border-b-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
-              <div className={`${baseStyle} w-1 h-1 bg-pink-400 rounded-full left-1/2 bottom-1/5 transform -translate-x-1/2`}></div>
-            </>
-          );
-        default: // smile
-          return (
-            <div className={`${baseStyle} w-3 h-1.5 border-b-1 border-black left-1/2 bottom-1/4 transform -translate-x-1/2 rounded-b-full`}></div>
-          );
-      }
-    };
-
-    const renderAccessory = () => {
-      if (player.avatar.accessory === 'none') return null;
-      
-      const baseStyle = "absolute flex items-center justify-center text-xs";
-      
-      switch (player.avatar.accessory) {
-        case 'glasses':
-          return (
-            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
-              👓
-            </div>
-          );
-        case 'sunglasses':
-          return (
-            <div className={`${baseStyle} left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2`}>
-              🕶️
-            </div>
-          );
-        case 'hat':
-          return (
-            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
-              🎩
-            </div>
-          );
-        case 'crown':
-          return (
-            <div className={`${baseStyle} left-1/2 top-0 transform -translate-x-1/2 -translate-y-1/2`}>
-              👑
-            </div>
-          );
-        case 'headband':
-          return (
-            <div className={`${baseStyle} left-1/2 top-1/4 transform -translate-x-1/2 -translate-y-1/2`}>
-              🎀
-            </div>
-          );
-        default:
-          return null;
-      }
-    };
-
-    return (
-      <div 
-        className="w-10 h-10 rounded-full relative transition-all duration-300" 
-        style={{ backgroundColor: player.avatar.color }}
-      >
-        {renderEyebrows()}
-        {renderEyes()}
-        {renderMouth()}
-        {renderAccessory()}
-      </div>
-    );
-  };
 
   // CRITICAL DEBUG LOGGING - This will show us exactly what's happening
   console.log('🔍 CRITICAL GameRoomPage Debug State:', {
@@ -375,7 +201,11 @@ const GameRoomPage: React.FC = () => {
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {gameState.players.map((p, index) => (
                     <div key={p.id} className="flex items-center p-3 bg-white/10 rounded-lg">
-                      {renderPlayerAvatar(p)}
+                      <AvatarDisplay 
+                        avatar={p.avatar} 
+                        size="medium" 
+                        animate={true}
+                      />
                       <div className="flex-grow ml-3">
                         <div className="font-medium text-white flex items-center">
                           {p.name}

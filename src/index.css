@@ -1,3 +1,42 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Avatar animations */
+@keyframes blink {
+  0%, 90%, 100% { opacity: 1; }
+  95% { opacity: 0; }
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.6); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-2deg); }
+  75% { transform: rotate(2deg); }
+}
+
+/* Utility classes for animations */
+.animate-blink {
+  animation: blink 3s infinite;
+}
+
+.animate-bob {
+  animation: bob 2s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 1s ease-in-out infinite;
+}
